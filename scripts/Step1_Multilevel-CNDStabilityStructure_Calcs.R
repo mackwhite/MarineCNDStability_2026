@@ -141,6 +141,7 @@ dt2 <- dt1 |>
       group_by(project, habitat, year, month, 
                site, subsite_level1, subsite_level2, subsite_level3, 
                scientific_name) |> 
+      ### sum across unique taxa at the transect level
       summarize(
             total_n = sum(nind_ug_hr*density, na.rm = TRUE),
             total_bm = sum(dmperind_g_ind*density, na.rm = TRUE),
@@ -149,3 +150,7 @@ dt2 <- dt1 |>
 glimpse(dt2)
 head(dt2)
 nacheck(dt2)
+### notes - need to consider the fact that diet_category varies within some families... 
+### for example, no longer in dt2 - but I don't know if we would want it in dt2...
+### need to also calculate trophic richness and species richness
+### also, need to remember that MCR needs 'fixed' and FCE needs to be brought to annual time_step
