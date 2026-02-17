@@ -1,14 +1,8 @@
 ###project: LTER Marine Consumer Nutrient Dynamic Synthesis Working Group
 ###author(s): MW, AC, LK, WRJ
-###goal(s): Wrangling raw CND data such that it is ready for model data joins
+###goal(s): Wrangling and summarizing raw CND data such that it is ready for analysis
 ###date(s): February 2026
 ###note(s): 
-## Here, we calculate CND stability and community structure (e.g., evenness, richness) metrics
-## at the population, trophic, and community levels. Community level data is used in manuscript (starts on line 736)
-## Population level calculations begin on line 22
-## Trophic level calculations begin on line 378
-## Community level calculations begin on line 736
-## Please - direct any questions to mackwhiteecology@gmail.com
 
 # Housekeeping ------------------------------------------------------------
 ### load necessary libraries
