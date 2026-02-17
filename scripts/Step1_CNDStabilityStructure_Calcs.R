@@ -144,6 +144,7 @@ dt2 <- dt1 |>
 glimpse(dt2)
 head(dt2)
 nacheck(dt2)
+
 ### notes - need to consider the fact that diet_category varies within some families... 
 ### for example, no longer in dt2 - but I don't know if we would want it in dt2...
 ### need to also calculate trophic richness and species richness
