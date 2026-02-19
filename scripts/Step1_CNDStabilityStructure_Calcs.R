@@ -9,7 +9,7 @@
 # install.packages("librarian")
 librarian::shelf(tidyverse, vegan, readxl, dplyr, splitstackshape, codyn, lavaan,
                  MuMIn, corrplot, performance, ggeffects, ggpubr, parameters, ggstats,
-                 brms, mixedup)
+                 brms, mixedup, rstatix)
 
 ### set custom functions
 nacheck <- function(df) {
@@ -757,9 +757,586 @@ m10 <- brm(
 
 model_table_all <- performance::compare_performance(m1,m4,m5,m6,m7,m8,m9,m10)
 
-model_selection <- model_table_all |>
+model_selection1 <- model_table_all |>
       mutate(dWAIC = WAIC - min(WAIC))
 
-write_csv(model_selection, "")
+write_csv(model_selection1, "output/tables/brms-fullmodel-selection-table-roundone.csv")
 
-rm(list = setdiff(ls(), c("dat_ready", "pr", "palette", 'm4')))
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", "palette", 'm4', 'model_selection1')
+rm(list = setdiff(ls(), keep))
+
+##################################################################################################
+### round two ------------------------------------------------------------------------------------
+##################################################################################################
+
+m41 <- brm(
+      comm_n_stability ~ t_rich_mean + spp_synchrony + (t_rich_mean + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m45 <- brm(
+      comm_n_stability ~ spp_turnover + spp_synchrony + (spp_turnover + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m47 <- brm(
+      comm_n_stability ~ troph_turnover + spp_synchrony + (troph_turnover + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m48 <- brm(
+      comm_n_stability ~ s_rich_mean + spp_synchrony + (s_rich_mean + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m49 <- brm(
+      comm_n_stability ~ t_div_mean + spp_synchrony + (t_div_mean + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m40 <- brm(
+      comm_n_stability ~ s_div_mean + spp_synchrony + (s_div_mean + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+model_table_all <- performance::compare_performance(m41,m4,m45,m47,m48,m49,m40)
+
+model_selection2 <- model_table_all |>
+      mutate(dWAIC = WAIC - min(WAIC))
+write_csv(model_selection2, "output/tables/brms-fullmodel-selection-table-roundtwo.csv")
+
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", "palette", 'm45', 'model_selection1', 'model_selection2')
+rm(list = setdiff(ls(), keep))
+
+##################################################################################################
+### round three ----------------------------------------------------------------------------------
+##################################################################################################
+
+m451 <- brm(
+      comm_n_stability ~ t_rich_mean + spp_turnover + spp_synchrony + (t_rich_mean + spp_turnover + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m457 <- brm(
+      comm_n_stability ~ troph_turnover + spp_turnover + spp_synchrony + (troph_turnover + spp_turnover + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m458 <- brm(
+      comm_n_stability ~ s_rich_mean + spp_turnover + spp_synchrony + (s_rich_mean + spp_turnover + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m459 <- brm(
+      comm_n_stability ~ t_div_mean + spp_turnover + spp_synchrony + (t_div_mean + spp_turnover + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m450 <- brm(
+      comm_n_stability ~ s_div_mean + spp_turnover + spp_synchrony + (s_div_mean + spp_turnover + spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+model_table_all <- performance::compare_performance(m45,m451,m457,m458,m459,m450)
+
+model_selection3 <- model_table_all |>
+      mutate(dWAIC = WAIC - min(WAIC))
+write_csv(model_selection3, "output/tables/brms-fullmodel-selection-table-roundthree.csv")
+
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", "palette", 'm45', 'model_selection1', 'model_selection2', 'model_selection3')
+rm(list = setdiff(ls(), keep))
+full_model <- m45
+saveRDS(full_model, file = 'local_data/rds-full-model.rds')
+
+##################################################################################################
+##################################################################################################
+##################################################################################################
+### Visualize Models -----------------------------------------------------------------------------
+##################################################################################################
+##################################################################################################
+##################################################################################################
+
+##################################################################################################
+### Single Term Models ---------------------------------------------------------------------------
+##################################################################################################
+
+synch = readRDS("local_data/rds-single-synchrony.rds")
+rich = readRDS("local_data/rds-single-richness.rds")
+glimpse(dat_ready)
+
+# stats ----
+p_synch = posterior_samples(synch)
+glimpse(p_synch)
+mean(p_synch$`r_program[PCCC,spp_synchrony]` + p_synch$b_spp_synchrony  < 0)
+mean(p_synch$`r_program[SBC,spp_synchrony]`  + p_synch$b_spp_synchrony  < 0)
+mean(p_synch$`r_program[VCR,spp_synchrony]`  + p_synch$b_spp_synchrony  < 0)
+mean(p_synch$`r_program[PCCS,spp_synchrony]` + p_synch$b_spp_synchrony  < 0)
+mean(p_synch$`r_program[MCR,spp_synchrony]`  + p_synch$b_spp_synchrony  < 0)
+mean(p_synch$`r_program[FCE,spp_synchrony]`  + p_synch$b_spp_synchrony  < 0)
+
+p_sr = posterior_samples(rich)
+mean(p_sr$`r_program[PCCC,s_rich_mean]` + p_sr$b_s_rich_mean > 0)
+mean(p_sr$`r_program[SBC,s_rich_mean]`  + p_sr$b_s_rich_mean > 0)
+mean(p_sr$`r_program[VCR,s_rich_mean]`  + p_sr$b_s_rich_mean > 0)
+mean(p_sr$`r_program[PCCS,s_rich_mean]` + p_sr$b_s_rich_mean > 0)
+mean(p_sr$`r_program[MCR,s_rich_mean]`  + p_sr$b_s_rich_mean > 0)
+mean(p_sr$`r_program[FCE,s_rich_mean]`  + p_sr$b_s_rich_mean > 0)
+
+### set color scheme ---
+program_palette = c("Overall"="#000000",
+                    "FCE"="#64a988",
+                    "MCR"="#ff967d",
+                    'PCCC'="#2A788EFF",
+                    "PCCS"="#8b6b93",
+                    'SBC'='#ff3f4c',
+                    "VCR"="#9b9254")
+
+
+prog = c('SBC', 'PCCC', 'VCR', 'PCCS', 'FCE', 'MCR')
+
+# species richness 
+# random effects
+re95 = mixedup::extract_random_coefs(rich, ci_level = c(0.95))
+re80 = mixedup::extract_random_coefs(rich, ci_level = c(0.8))
+
+re_beta = left_join(re95, re80) |> 
+      rename(term = effect,
+             program = group)
+
+# fixed effects
+fe95 = mixedup::extract_fixed_effects(rich, ci_level = c(0.95))
+fe80 = mixedup::extract_fixed_effects(rich, ci_level = c(0.8))
+
+fe_beta = left_join(fe95, fe80) |> 
+      mutate(program = 'Overall') 
+
+# make data frame of all betas
+df_beta = bind_rows(re_beta, fe_beta) |> 
+      filter(term != 'Intercept') |> 
+      mutate(program = factor(program, levels = prog))
+
+# make equation data set
+df_eq = bind_rows(re_beta, fe_beta) |> 
+      select(term, program, value) |> 
+      pivot_wider(names_from = term, values_from = value)  |> 
+      rename(beta = s_rich_mean)
+
+# load and get min and max values
+### read in necessary data ---
+ov <- model_data_all |>
+      rename(program = project) |> 
+      select(program, value = s_rich_mean) |>
+      distinct() |> 
+      group_by(program) |> 
+      mutate(scaled = scale(value)) |> 
+      ungroup() |> 
+      slice(c(which.min(value), which.max(value))) |> 
+      mutate(program = 'Overall')
+
+dat <-model_data_all |>
+      rename(program = project) |> 
+      select(program, value = s_rich_mean) |>
+      distinct() |> 
+      group_by(program) |> 
+      mutate(scaled = scale(value)) |>  
+      slice(c(which.min(value), which.max(value))) |> 
+      ungroup() |> 
+      bind_rows(ov)
+
+dat_scaled <- dat |>
+              group_by(program, scaled) |> 
+              mutate(i = row_number()) |> 
+              select(program, scaled)
+
+raw <-model_data_all |>
+      rename(program = project) |> 
+      select(program, 
+             value = s_rich_mean,
+             stab = comm_n_stability) 
+
+df <- dat_scaled |> 
+      left_join(df_eq) |> 
+      mutate(pred = beta*scaled + Intercept,
+             stab = pred*sd(raw$stab) + mean(raw$stab)) |> 
+      left_join(dat) |> 
+      mutate(program = factor(program, levels = prog))
+
+a <- ggplot(df |> filter(program != 'Overall'), aes(value, stab, color = program)) +
+      geom_point(data = raw, aes(value, stab, color = program), size = 2)+
+      geom_line(linewidth = 1.75)+
+      scale_color_manual(values = program_palette)+
+      labs(y = 'CND Stability', x = 'Species Richness')+
+      theme_classic()+
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 12),
+            axis.text.y = element_text(face = "bold", color = "black", size = 12),
+            axis.title.x = element_text(face = "bold", color = "black", size = 14),
+            axis.title.y = element_text(face = "bold", color = "black", size = 14),
+            strip.text = element_blank(),
+            strip.background = element_blank(),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", color = "black", size = 12),
+            legend.title = element_text(face = "bold", color = "black", size = 14))
+a
+
+b <- ggplot(df_beta|> filter(program != 'Overall'), aes(program, value, color = program)) +
+      geom_hline(aes(yintercept = 0), linetype = "dashed", linewidth = 0.75) +
+      geom_pointrange(aes(ymin = lower_10, ymax = upper_90), linewidth = 2) +
+      geom_pointrange(aes(ymin = lower_2.5, ymax = upper_97.5), linewidth = 1, size = .9) +
+      labs(y = 'Beta', x = NULL) +
+      scale_color_manual(values = program_palette) +
+      scale_y_continuous(limits = c(-0.35, 1.03)) +
+      coord_flip() +
+      theme_classic() +
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 12),
+            axis.text.y = element_text(face = "bold", color = "black", size = 12),
+            axis.title.x = element_text(face = "bold", color = "black", size = 14),
+            axis.title.y = element_text(face = "bold", color = "black", size = 14),
+            strip.text = element_text(face = "bold", color = "black", size = 12),
+            legend.position = "none",
+            legend.background = element_blank(),
+            legend.text = element_text(face = "bold", color = "black", size = 12),
+            legend.title = element_text(face = "bold", color = "black", size = 14))
+b
+
+ggpubr::ggarrange(a,b, align = 'h')
+
+sr = ggpubr::ggarrange(a,b, labels = c('c', 'd'), align = 'h', legend = 'none')
+
+# synchrony 
+# random effects
+re95 = mixedup::extract_random_coefs(synch, ci_level = c(0.95))
+re80 = mixedup::extract_random_coefs(synch, ci_level = c(0.8))
+
+re_beta = left_join(re95, re80) |> 
+      rename(term = effect,
+             program = group)
+
+# fixed effects
+fe95 = mixedup::extract_fixed_effects(synch, ci_level = c(0.95))
+fe80 = mixedup::extract_fixed_effects(synch, ci_level = c(0.8))
+
+fe_beta = left_join(fe95, fe80) |> 
+      mutate(program = 'Overall') 
+
+# make data frame of all betas
+df_beta = bind_rows(re_beta, fe_beta) |> 
+      filter(term != 'Intercept') |> 
+      mutate(program = factor(program, levels = prog))
+
+# make equation data set
+df_eq = bind_rows(re_beta, fe_beta) |> 
+      select(term, program, value) |> 
+      pivot_wider(names_from = term, values_from = value)  |> 
+      rename(beta = spp_synchrony)
+
+ov <- model_data_all |>
+      rename(program = project) |> 
+      select(program, value = spp_synchrony) |>
+      distinct() |> 
+      group_by(program) |> 
+      mutate(scaled = scale(value)) |> 
+      ungroup() |> 
+      slice(c(which.min(value), which.max(value))) |> 
+      mutate(program = 'Overall')
+
+dat <-model_data_all |>
+      rename(program = project) |> 
+      select(program, value = spp_synchrony) |>
+      distinct() |> 
+      group_by(program) |> 
+      mutate(scaled = scale(value)) |>  
+      slice(c(which.min(value), which.max(value))) |> 
+      ungroup() |> 
+      bind_rows(ov)
+
+dat_scaled <- dat |>
+      group_by(program, scaled) |> 
+      mutate(i = row_number()) |> 
+      select(program, scaled)
+
+raw <-model_data_all |>
+      rename(program = project) |> 
+      select(program, 
+             value = spp_synchrony,
+             stab = comm_n_stability) 
+
+df <- dat_scaled |> 
+      left_join(df_eq) |> 
+      mutate(pred = beta*scaled + Intercept,
+             stab = pred*sd(raw$stab) + mean(raw$stab)) |> 
+      left_join(dat) |> 
+      mutate(program = factor(program, levels = prog))
+
+a <- ggplot(df |> filter(program != 'Overall'), aes(value, stab, color = program)) +
+      geom_point(data = raw, aes(value, stab, color = program), size = 2)+
+      geom_line(linewidth = 1.75)+
+      scale_color_manual(values = program_palette)+
+      labs(y = 'CND Stability', x = 'Species Synchrony')+
+      theme_classic()+
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 12),
+            axis.text.y = element_text(face = "bold", color = "black", size = 12),
+            axis.title.x = element_text(face = "bold", color = "black", size = 14),
+            axis.title.y = element_text(face = "bold", color = "black", size = 14),
+            strip.text = element_blank(),
+            strip.background = element_blank(),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", color = "black", size = 12),
+            legend.title = element_text(face = "bold", color = "black", size = 14))
+a
+
+b <- ggplot(df_beta|> filter(program != 'Overall'), aes(program, value, color = program)) +
+      geom_hline(aes(yintercept = 0), linetype = "dashed", linewidth = 0.75) +
+      geom_pointrange(aes(ymin = lower_10, ymax = upper_90), linewidth = 2) +
+      geom_pointrange(aes(ymin = lower_2.5, ymax = upper_97.5), linewidth = 1, size = .9) +
+      labs(y = 'Beta', x = NULL) +
+      scale_color_manual(values = program_palette) +
+      # scale_y_continuous(limits = c(-0.35, 1.03)) +
+      coord_flip() +
+      theme_classic() +
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 12),
+            axis.text.y = element_text(face = "bold", color = "black", size = 12),
+            axis.title.x = element_text(face = "bold", color = "black", size = 14),
+            axis.title.y = element_text(face = "bold", color = "black", size = 14),
+            strip.text = element_text(face = "bold", color = "black", size = 12),
+            legend.position = "none",
+            legend.background = element_blank(),
+            legend.text = element_text(face = "bold", color = "black", size = 12),
+            legend.title = element_text(face = "bold", color = "black", size = 14))
+b
+
+syn = ggpubr::ggarrange(a,b, labels = c('a', 'b', align = 'h', legend = 'none'))
+ggarrange(syn, sr, align = 'v', nrow =2)
+
+ggsave('output/fig3.png', dpi = 600, units= 'in', height = 6, width = 6)
+
+##################################################################################################
+### Full Model -----------------------------------------------------------------------------------
+##################################################################################################
+
+### read in necessary data ----
+full_model = readRDS('local_data/rds-full-model.rds')
+
+#summary stats -----
+post = posterior_samples(full_model)
+
+mean(post$`r_program[MCR,spp_synchrony]`+ post$b_spp_synchrony < 0)
+mean(post$`r_program[MCR,spp_turnover]` + post$b_spp_turnover < 0)
+mean(post$`r_program[PCCS,spp_synchrony]`+ post$b_spp_synchrony < 0)
+mean(post$`r_program[PCCS,spp_turnover]` + post$b_spp_turnover < 0)
+mean(post$`r_program[FCE,spp_synchrony]`+ post$b_spp_synchrony < 0)
+mean(post$`r_program[FCE,spp_turnover]` + post$b_spp_turnover > 0)
+mean(post$`r_program[PCCC,spp_synchrony]`+ post$b_spp_synchrony > 0)
+mean(post$`r_program[PCCC,spp_turnover]` + post$b_spp_turnover < 0)
+mean(post$`r_program[SBC,spp_synchrony]`+ post$b_spp_synchrony < 0)
+mean(post$`r_program[SBC,spp_turnover]` + post$b_spp_turnover < 0)
+mean(post$`r_program[VCR,spp_synchrony]`+ post$b_spp_synchrony < 0)
+mean(post$`r_program[VCR,spp_turnover]` + post$b_spp_turnover < 0)
+
+pp_check(full_model)
+# random effects
+re95 = mixedup::extract_random_coefs(full_model, ci_level = c(0.95))
+re80 = mixedup::extract_random_coefs(full_model, ci_level = c(0.8))
+re90 = mixedup::extract_random_coefs(full_model, ci_level = c(0.9))
+re50 = mixedup::extract_random_coefs(full_model, ci_level = c(0.5))
+
+re_beta = left_join(re95, re80) |> 
+      left_join(re90) |> 
+      left_join(re50)|> 
+      rename(term = effect,
+             program = group)
+
+# fixed effects
+fe95 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.95))
+fe80 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.8))
+fe90 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.9))
+fe50 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.5))
+
+fe_beta = left_join(fe95, fe80) |> 
+      left_join(fe90) |> 
+      left_join(fe50) |> 
+      mutate(program = 'Overall') 
+
+# make data frame of all betas
+df_beta = bind_rows(re_beta, fe_beta) |> 
+      filter(term != 'Intercept') |> 
+      mutate(program = factor(program, levels = prog),
+             term = factor(term, levels = c('spp_synchrony',
+                                            'spp_turnover'),
+                           labels = c('Species Synchrony',
+                                      'Species Turnover')))
+
+# make equation data set
+df_eq = bind_rows(re_beta, fe_beta) |> 
+      select(term, program, value) |> 
+      pivot_wider(names_from = term, values_from = value) |> 
+      pivot_longer(spp_turnover:spp_synchrony, names_to = 'term', values_to = 'beta')
+
+ov =  model_data_all |>
+      rename(program = project) |> 
+      select(program,
+             spp_turnover,
+             spp_synchrony) |>
+      distinct() |> 
+      pivot_longer(spp_turnover:spp_synchrony, 
+                   names_to = 'term', values_to = 'value') |> 
+      group_by(program,term) |> 
+      mutate(scaled = scale(value)) |> 
+      group_by(term) |> 
+      slice(c(which.min(value), which.max(value))) |> 
+      mutate(program = 'Overall')
+
+dat = model_data_all |>
+      rename(program = project) |> 
+      select(program,
+             spp_turnover,
+             spp_synchrony) |>
+      distinct() |> 
+      pivot_longer(spp_turnover:spp_synchrony, 
+                   names_to = 'term', values_to = 'value') |> 
+      group_by(program,term) |> 
+      mutate(scaled = scale(value)) |>  
+      slice(c(which.min(value), which.max(value))) |> 
+      ungroup() |> 
+      bind_rows(ov)
+
+dat_scaled = dat |>
+      group_by(program, term) |> 
+      mutate(i = row_number()) |> 
+      select(program, term, scaled)
+
+df = dat_scaled |> 
+      left_join(df_eq) |> 
+      mutate(stab = beta*scaled + Intercept) |> 
+      left_join(dat) |> 
+      mutate(program = factor(program, levels = prog),
+             term = factor(term, levels = c('spp_synchrony',
+                                            'spp_turnover'),
+                           labels = c('Species Synchrony',
+                                      'Species Turnover')))
+
+a = ggplot(df|> filter(program != 'Overall'), aes(value, stab, color = program))+
+      geom_line(linewidth = 1.75)+
+      scale_color_manual(values = program_palette)+
+      facet_wrap(~term, ncol = 1, strip.position = 'right', scales = 'free')+
+      labs(y = 'CND Stability', x = NULL)+
+      theme_classic()+
+      theme(axis.text = element_blank(),
+            axis.ticks = element_blank(),
+            axis.title.x = element_text(face = "bold", color = "black", size = 12),
+            axis.title.y = element_text(face = "bold", color = "black", size = 12),
+            strip.text = element_blank(),
+            strip.background = element_blank(),
+            legend.position = "bottom",
+            legend.text = element_text(face = "bold", color = "black", size = 12),
+            legend.title = element_text(face = "bold", color = "black", size = 14))
+a
+
+# betas 
+b = ggplot(df_beta|> filter(program != 'Overall'), aes(program, value, color = program))+
+      geom_hline(aes(yintercept = 0), linetype = "dashed", linewidth = 0.75) +
+      geom_pointrange(aes(ymin = lower_10, ymax = upper_90), linewidth = 2)+
+      geom_pointrange(aes(ymin = lower_2.5, ymax = upper_97.5), linewidth = 1, size = .9)+
+      labs(y = 'Beta', x = NULL)+
+      scale_color_manual(values = program_palette)+
+      coord_flip()+
+      facet_wrap(~term, ncol = 1, strip.position = 'right')+
+      theme_classic()+
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 10),
+            axis.text.y = element_text(face = "bold", color = "black", size = 10),
+            axis.title.x = element_text(face = "bold", color = "black", size = 12),
+            axis.title.y = element_text(face = "bold", color = "black", size = 12),
+            strip.text = element_text(face = "bold", color = "black", size = 10),
+            legend.position = "none",
+            legend.background = element_blank(),
+            legend.text = element_text(face = "bold", color = "black", size = 12),
+            legend.title = element_text(face = "bold", color = "black", size = 14))
+b
+
+plot = ggpubr::ggarrange(a,b,labels = c('a', 'b'), align = 'h', legend = 'none', label.x = -0.01)
+plot
+
+ggsave('output/fig4.png', plot = plot, dpi = 600, units= 'in', height = 7.5, width = 5.75)
+
+##################################################################################################
+##################################################################################################
+##################################################################################################
+### Supplemental Materials -----------------------------------------------------------------------
+##################################################################################################
+##################################################################################################
+##################################################################################################
+
+##################################################################################################
+### Boxplot --------------------------------------------------------------------------------------
+##################################################################################################
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette")
+rm(list = setdiff(ls(), keep))
+dat <- model_data_all |> rename(program = project)
+summ_test <- dat |>  
+      group_by(program) |> 
+      summarize(
+            mean = mean(comm_n_stability, na.rm = TRUE),
+            median = median(comm_n_stability, na.rm = TRUE)
+      )
+anova_mod <- aov(comm_n_stability ~ program, data = dat)
+summary(anova_mod)
+par(mfrow=c(2,2))
+plot(anova_mod)
+oneway.test(comm_n_stability ~ program, data = dat)
+posthoc <- games_howell_test(dat, comm_n_stability ~ program)
+posthoc
+
+letters_df <- tribble(
+      ~program, ~letters,
+      "MCR",    "a",
+      "FCE",    "b",
+      "PCCC",   "b",
+      "PCCS",   "b",
+      "SBC",    "c",
+      "VCR",    "c"
+)
+
+letters_df
