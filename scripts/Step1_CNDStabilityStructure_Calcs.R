@@ -7,7 +7,9 @@
 # Housekeeping ------------------------------------------------------------
 ### load necessary libraries
 # install.packages("librarian")
-librarian::shelf(tidyverse, vegan, readxl, dplyr, splitstackshape, codyn)
+librarian::shelf(tidyverse, vegan, readxl, dplyr, splitstackshape, codyn, lavaan,
+                 MuMIn, corrplot, performance, ggeffects, ggpubr, parameters, ggstats,
+                 brms, mixedup)
 
 ### set custom functions
 nacheck <- function(df) {
@@ -585,3 +587,179 @@ glimpse(model_data_all)
 head(model_data_all)
 nacheck(model_data_all)
 # write_csv(model_data_all, "local_data/model-data-all.csv")
+
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+# Run across system model ------------------------------------------------------------------------
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+
+keep <- c("nacheck", "model_data_all", "cnd_ts_data")
+rm(list = setdiff(ls(), keep))
+
+glimpse(model_data_all)
+dat_scaled <- model_data_all |> 
+      rename(program = project) |> 
+      select(program, site, comm_n_stability, everything()) |> 
+      mutate(comm_n_stability = as.numeric(scale(comm_n_stability))) |>
+      mutate(across(comm_n_mean:troph_synchrony, \(x) as.numeric(scale(x, center = TRUE))))
+glimpse(dat_scaled)      
+
+glimpse(dat_scaled)
+dat_ready <- dat_scaled      
+glimpse(dat_ready)
+
+path_model <- '
+  # Structural equations for the path model
+  comm_n_stability ~ s_rich_mean + troph_turnover + spp_turnover + spp_synchrony  # Stability regressed on Richness, Trophic Turnover, Pop. Turnover, Synchrony
+  spp_turnover     ~ s_rich_mean + t_rich_mean                                    # Population Turnover regressed on Species Richness and Trophic Richness
+  spp_synchrony    ~ s_div_mean + s_rich_mean + t_div_mean                        # Population Synchrony on Species Evenness, Species Richness, Trophic Evenness
+
+  # Label specific paths to calculate indirect effects
+  spp_synchrony ~ a_se*s_div_mean                                                 # a_se: effect of Species Evenness on Synchrony
+  comm_n_stability ~ b_syn*spp_synchrony                                          # b_syn: effect of Synchrony on Stability
+
+  # Define the indirect effect of Species Evenness on Stability via Synchrony
+  indirect_evenness := a_se * b_syn
+'
+
+fit <- sem(path_model, data = dat_ready)
+summary(
+      fit,
+      standardized = TRUE,
+      fit.measures = TRUE,
+      rsquare = TRUE
+)
+# run across system model -------------------------------------------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit")
+rm(list = setdiff(ls(), keep))
+
+glimpse(model_data_all)
+dat_scaled <- model_data_all |> 
+      rename(program = project) |> 
+      select(program, site, comm_n_stability, everything()) |> 
+      mutate(comm_n_stability = as.numeric(scale(comm_n_stability))) |>
+      group_by(program) |> 
+      mutate(across(comm_n_mean:troph_synchrony, \(x) as.numeric(scale(x, center = TRUE)))) |> 
+      ungroup()
+glimpse(dat_scaled)      
+glimpse(dat_scaled)
+dat_ready <- dat_scaled      
+glimpse(dat_ready)
+
+### set priors following Lemoine (2019, Ecology)
+pr = prior(normal(0, 1), class = 'b')
+
+##################################################################################################
+##################################################################################################
+##################################################################################################
+### Full Models ----------------------------------------------------------------------------------
+##################################################################################################
+##################################################################################################
+##################################################################################################
+
+test_corr <- dat_ready |> select(s_rich_mean, s_div_mean,
+                                 t_rich_mean, t_div_mean,
+                                 spp_turnover, spp_synchrony,
+                                 troph_turnover, troph_synchrony)
+
+matrix <- cor(test_corr, use = 'complete.obs')
+
+corrplot(matrix, method = "number", type = "lower", tl.col = "black", tl.srt = 45)
+glimpse(dat_ready)
+
+### round one ------------------------------------------------------------------------------------
+m1 <- brm(
+      comm_n_stability ~ t_rich_mean + (t_rich_mean | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m4 <- brm(
+      comm_n_stability ~ spp_synchrony + (spp_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+### best fit single term model
+# saveRDS(m4, file = 'local_data/rds-single-synchrony.rds')
+
+m5 <- brm(
+      comm_n_stability ~ spp_turnover + (spp_turnover | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m6 <- brm(
+      comm_n_stability ~ troph_synchrony + (troph_synchrony | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m7 <- brm(
+      comm_n_stability ~ troph_turnover + (troph_turnover | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m8 <- brm(
+      comm_n_stability ~ s_rich_mean + (s_rich_mean | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+### model of interest, given across-ecosystem importance
+# saveRDS(m8, file = 'local_data/rds-single-richness.rds')
+
+m9 <- brm(
+      comm_n_stability ~ s_div_mean + (s_div_mean | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+m10 <- brm(
+      comm_n_stability ~ t_div_mean + (t_div_mean | program),
+      data = dat_ready,
+      prior = pr,
+      warmup = 1000,
+      iter = 10000,
+      chains = 4
+)
+
+model_table_all <- performance::compare_performance(m1,m4,m5,m6,m7,m8,m9,m10)
+
+model_selection <- model_table_all |>
+      mutate(dWAIC = WAIC - min(WAIC))
+
+write_csv(model_selection, "")
+
+rm(list = setdiff(ls(), c("dat_ready", "pr", "palette", 'm4')))
