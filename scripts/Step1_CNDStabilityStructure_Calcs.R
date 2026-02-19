@@ -9,7 +9,7 @@
 # install.packages("librarian")
 librarian::shelf(tidyverse, vegan, readxl, dplyr, splitstackshape, codyn, lavaan,
                  MuMIn, corrplot, performance, ggeffects, ggpubr, parameters, ggstats,
-                 brms, mixedup, rstatix)
+                 brms, mixedup, rstatix, sf, ggspatial)
 
 ### set custom functions
 nacheck <- function(df) {
@@ -1335,8 +1335,307 @@ letters_df <- tribble(
       "FCE",    "b",
       "PCCC",   "b",
       "PCCS",   "b",
-      "SBC",    "c",
+      "SBC",    "b,c",
       "VCR",    "c"
 )
-
 letters_df
+
+letters <- letters_df |> 
+      left_join(dat) |> 
+      select(program, letters, comm_n_stability) |> 
+      group_by(program, letters) |> 
+      summarize(max = max(comm_n_stability, na.rm = TRUE),
+                .groups = 'drop') |> 
+      group_by(letters) |> 
+      mutate(pos = max(max))
+
+dat |> 
+      mutate(program = factor(
+            program,
+            levels = c("MCR", "PCCS", "FCE", "PCCC", "SBC", "VCR")
+      )) |>
+      ggplot(aes(x=program, y=comm_n_stability, fill = program)) +
+      geom_jitter(aes(color = program), shape = 16, size = 2, width = 0.2, alpha = 1.0)+
+      geom_boxplot(outlier.shape = NA, alpha = 0.35) +
+      scale_fill_manual(values = program_palette) + 
+      scale_color_manual(values = program_palette) +
+      labs(y = "CND Stability", 
+           fill = "Program",
+           x = NULL) +
+      theme_classic() +
+      geom_text(
+            data = letters, 
+            aes(x = program, y = pos + 0.2, label = letters), 
+            inherit.aes = FALSE, 
+            vjust = 0,
+            fontface = "bold",
+            size = 3.5,            
+            color = "black"      
+      ) +
+      theme(axis.text.x = element_text(face = "bold", color = "black"),
+            axis.text.y = element_text(face = "bold", color = "black"),
+            axis.title.x = element_text(face = "bold", color = "black"),
+            axis.title.y = element_text(face = "bold", color = "black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"),
+            strip.text = element_text(face = "bold", color = "black"))
+
+ggsave("output/figure-one.png", units = "in", width = 4,
+       height = 4, dpi =  600)
+
+##################################################################################################
+### Simple Regression ----------------------------------------------------------------------------
+##################################################################################################
+glimpse(dat)
+model <- lm(log1p(comm_n_stability) ~ log1p(s_rich_mean), data = dat)
+summary(model)$r.squared 
+summary(model)
+r2 <- summary(model)$r.squared
+r2
+
+summ <- dat |>
+      group_by(program) |> 
+      mutate(stability = mean(comm_n_stability),
+             richness  = mean(s_rich_mean))
+
+summ_model <- lm(log1p(stability) ~ log1p(richness), data = summ)
+summary(summ_model)$r.squared 
+summary(summ_model)
+r2_summ <- summary(summ_model)$r.squared
+r2_summ
+
+dat |>
+      ggplot(aes(x = log1p(s_rich_mean), y = log1p(comm_n_stability))) +
+      # ggplot(aes(x = log(s_rich_mean), y = log(comm_n_stability))) +
+      geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
+      geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
+      geom_point(aes(x = log1p(richness), y = log1p(stability), color = program), size = 5, dat = summ) +
+      # geom_point(aes(x = log(richness), y = log(stability), color = program), size = 5, dat = summ) +
+      labs(x = "log(1+Species Richness)",
+           y = "log(1+CND Stability)") +
+      scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 14),
+            axis.text.y = element_text(face = "bold", color = "black", size = 14),
+            axis.title.x = element_text(face = "bold", color = "black", size = 16),
+            axis.title.y = element_text(face = "bold", color = "black", size = 16),
+            legend.position = c(0.95, 0.05),
+            legend.justification = c(1, 0),
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"))
+
+ggsave("output/fig2-panelb.png", units = "in", width = 4.2,
+       height = 4.2, dpi =  600)
+
+##################################################################################################
+### Map   ----------------------------------------------------------------------------------------
+##################################################################################################
+
+world <- st_read('../../qgis/continent/world-continents.shp')
+glimpse(world)
+
+coords <- read_csv("local_data/LTER_Site_Coords_w_information.csv") |> 
+      filter(Site %in% c("FCE", "MCR", "SBC", "VCR")) |> 
+      rename(program = Site,
+             y = Latitude,
+             x = Longitude) |> 
+      dplyr::select(program, y, x)
+glimpse(coords)
+
+pisco <- tribble(
+      ~program, ~y,       ~x,
+      "PCCC",   38.47409, -123.2485,
+      "PCCS",   35.5000,  -121.019020
+)
+
+dt <- rbind(coords, pisco) |> 
+      mutate(program = as.factor(program)) |> 
+      st_as_sf(coords = c("x", "y"), crs = 4326) |> 
+      st_transform(crs = 26917)
+
+all <- ggplot() +
+      geom_sf(data = world, fill = "grey", color = NA) +
+      geom_sf(data = dt, color = "white", size = 5) +
+      geom_sf(data = dt, aes(color = program), size = 4) +  
+      annotation_scale(location = "br", width_hint = 0.3, 
+                       bar_cols = c("black", "aliceblue"), text_cex = 1.0) +
+      annotation_north_arrow(location = "tl", which_north = "true", 
+                             style = north_arrow_fancy_orienteering(fill = c("black", "aliceblue"),
+                                                                    line_col = "black" ), 
+                             height = unit(2.0, "cm"), width = unit(2.0, "cm")) +
+      scale_color_manual(values = program_palette, breaks = levels(dt$program)) +
+      coord_sf(xlim = c(-148.7, -70),
+               ylim = c(-20.0, 45.0)) +
+      theme_bw() +
+      theme(
+            axis.title = element_blank(),
+            axis.text = element_blank(),
+            axis.ticks = element_blank(),
+            axis.ticks.length = unit(0, "pt"),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.background = element_rect(fill = "aliceblue", color = NA),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = 'aliceblue'),
+            legend.position = c(0.11,0.5),
+            legend.box.background = element_rect(fill = NA, color = 'black', linewidth = 2),
+            legend.text = element_text(size = 12, face = 'bold')
+      )
+
+all
+
+ggsave("output/sitemap.png", units = "in", width = 5,
+       height = 5, dpi =  600)
+
+##################################################################################################
+### Map Time Series ------------------------------------------------------------------------------
+##################################################################################################
+
+ann_dt <- cnd_ts_data |> rename(program = project)
+glimpse(ann_dt)
+
+ann_dt |> 
+      filter(program == "SBC") |> 
+      ggplot(aes(x = year, y = comm_n, group = site, color = program)) +
+      geom_line(alpha = 0.8, linewidth = 1) +
+      labs(x = 'Year',
+           y = expression(bold('Aggregate Nitrogen Supply (μg '*~m^-2~""~hr^-1*')'))) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      scale_x_continuous(breaks = c(2000,2005,2010,2015,2020)) +
+      theme(
+            axis.text = element_text(face = "bold", size = 12, color = "black"),
+            axis.title.y = element_text(face = "bold", size = 14, color = "black"),
+            axis.title.x = element_blank(),
+            axis.line = element_line("black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", size = 14, color = "black"),
+            legend.title = element_text(face = "bold", size = 14, color = "black"),
+            panel.background = element_rect(fill = "white"),
+            strip.background = element_blank(),
+            strip.text = element_text(face = "bold", size = 12, color = "black"))
+
+ggsave("output/map_insets/sbc-timeseries.png", units = "in", width = 5,
+       height = 5, dpi =  600)
+
+ann_dt |> 
+      filter(program == "MCR") |> 
+      ggplot(aes(x = year, y = comm_n, group = site, color = program)) +
+      geom_line(alpha = 0.8, linewidth = 1) +
+      labs(x = 'Year',
+           y = expression(bold('Aggregate Nitrogen Supply (μg '*~m^-2~""~hr^-1*')'))) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      scale_x_continuous(breaks = c(2006,2010,2014,2018,2022)) +
+      theme(
+            axis.text = element_text(face = "bold", size = 12, color = "black"),
+            axis.title.y = element_text(face = "bold", size = 14, color = "black"),
+            axis.title.x = element_blank(),
+            axis.line = element_line("black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", size = 14, color = "black"),
+            legend.title = element_text(face = "bold", size = 14, color = "black"),
+            panel.background = element_rect(fill = "white"),
+            strip.background = element_blank(),
+            strip.text = element_text(face = "bold", size = 12, color = "black"))
+
+ggsave("output/map_insets/mcr-timeseries.png", units = "in", width = 5,
+       height = 5, dpi =  600)
+
+ann_dt |> 
+      filter(program == "VCR") |> 
+      ggplot(aes(x = year, y = comm_n, group = site, color = program)) +
+      geom_line(alpha = 0.8, linewidth = 1) +
+      labs(x = 'Year',
+           y = expression(bold('Aggregate Nitrogen Supply (μg '*~m^-2~""~hr^-1*')'))) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      scale_x_continuous(breaks = c(2012,2014,2016,2018)) +
+      theme(
+            axis.text = element_text(face = "bold", size = 12, color = "black"),
+            axis.title.y = element_text(face = "bold", size = 14, color = "black"),
+            axis.title.x = element_blank(),
+            axis.line = element_line("black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", size = 14, color = "black"),
+            legend.title = element_text(face = "bold", size = 14, color = "black"),
+            panel.background = element_rect(fill = "white"),
+            strip.background = element_blank(),
+            strip.text = element_text(face = "bold", size = 12, color = "black"))
+
+ggsave("output/map_insets/vcr-timeseries.png", units = "in", width = 5,
+       height = 5, dpi =  600)
+
+ann_dt|> 
+      filter(program == "FCE") |> 
+      ggplot(aes(x = year, y = comm_n, group = site, color = program)) +
+      geom_line(alpha = 0.8, linewidth = 1) +
+      labs(x = 'Year',
+           y = expression(bold('Aggregate Nitrogen Supply (μg '*~m^-1~""~hr^-1*')'))) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      scale_x_continuous(breaks = c(2005,2008,2011,2014,2017,2020,2023)) +
+      theme(
+            axis.text = element_text(face = "bold", size = 12, color = "black"),
+            axis.title.y = element_text(face = "bold", size = 14, color = "black"),
+            axis.title.x = element_blank(),
+            axis.line = element_line("black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", size = 14, color = "black"),
+            legend.title = element_text(face = "bold", size = 14, color = "black"),
+            panel.background = element_rect(fill = "white"),
+            strip.background = element_blank(),
+            strip.text = element_text(face = "bold", size = 12, color = "black"))
+
+ggsave("output/map_insets/fce-timeseries.png", units = "in", width = 5,
+       height = 5, dpi =  600)
+
+ann_dt |> 
+      filter(program == "PCCC") |> 
+      ggplot(aes(x = year, y = comm_n, group = site, color = program)) +
+      geom_line(alpha = 0.8, linewidth = 1) +
+      labs(x = 'Year',
+           y = expression(bold('Aggregate Nitrogen Supply (μg '*~m^-2~""~hr^-1*')'))) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      scale_x_continuous(breaks = c(2000,2005,2010,2015,2020)) +
+      theme(
+            axis.text = element_text(face = "bold", size = 12, color = "black"),
+            axis.title.y = element_text(face = "bold", size = 14, color = "black"),
+            axis.title.x = element_blank(),
+            axis.line = element_line("black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", size = 14, color = "black"),
+            legend.title = element_text(face = "bold", size = 14, color = "black"),
+            panel.background = element_rect(fill = "white"),
+            strip.background = element_blank(),
+            strip.text = element_text(face = "bold", size = 12, color = "black"))
+
+ggsave("output/map_insets/pccc-timeseries.png", units = "in", width = 5,
+       height = 5, dpi =  600)
+
+ann_dt |> 
+      filter(program == "PCCS") |> 
+      ggplot(aes(x = year, y = comm_n, group = site, color = program)) +
+      geom_line(alpha = 0.8, linewidth = 1) +
+      labs(x = 'Year',
+           y = expression(bold('Aggregate Nitrogen Supply (μg '*~m^-2~""~hr^-1*')'))) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      scale_x_continuous(breaks = c(2000,2005,2010,2015,2020)) +
+      theme(
+            axis.text = element_text(face = "bold", size = 12, color = "black"),
+            axis.title.y = element_text(face = "bold", size = 14, color = "black"),
+            axis.title.x = element_blank(),
+            axis.line = element_line("black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", size = 14, color = "black"),
+            legend.title = element_text(face = "bold", size = 14, color = "black"),
+            panel.background = element_rect(fill = "white"),
+            strip.background = element_blank(),
+            strip.text = element_text(face = "bold", size = 12, color = "black"))
+
+ggsave("output/map_insets/pccs-timeseries.png", units = "in", width = 5,
+       height = 5, dpi =  600)
