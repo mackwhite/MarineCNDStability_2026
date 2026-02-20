@@ -123,8 +123,10 @@ dt1 <- dt_ab |>
       
       # coalesce density columns 
       mutate(density = coalesce(density_num_m, density_num_m2)) |> 
-      select(-density_num_m, -density_num_m2, -density_num_m3)
-
+      select(-density_num_m, -density_num_m2, -density_num_m3) |> 
+      
+      # filter out high densities of large-bodied fishes that interrupt ts
+      filter(!(density > 1 & nind_ug_hr > 20000))
 glimpse(dt1)
 nacheck(dt1)
 head(dt1)
@@ -1176,7 +1178,6 @@ mean(post$`r_program[SBC,spp_turnover]` + post$b_spp_turnover < 0)
 mean(post$`r_program[VCR,spp_synchrony]`+ post$b_spp_synchrony < 0)
 mean(post$`r_program[VCR,spp_turnover]` + post$b_spp_turnover < 0)
 
-pp_check(full_model)
 # random effects
 re95 = mixedup::extract_random_coefs(full_model, ci_level = c(0.95))
 re80 = mixedup::extract_random_coefs(full_model, ci_level = c(0.8))
@@ -1299,7 +1300,7 @@ b
 plot = ggpubr::ggarrange(a,b,labels = c('a', 'b'), align = 'h', legend = 'none', label.x = -0.01)
 plot
 
-ggsave('output/fig4.png', plot = plot, dpi = 600, units= 'in', height = 7.5, width = 5.75)
+ggsave('output/fig4.png', plot = plot, dpi = 600, units= 'in', height = 5, width = 5)
 
 ##################################################################################################
 ##################################################################################################
@@ -1412,8 +1413,8 @@ dat |>
       geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
       geom_point(aes(x = log1p(richness), y = log1p(stability), color = program), size = 5, dat = summ) +
       # geom_point(aes(x = log(richness), y = log(stability), color = program), size = 5, dat = summ) +
-      labs(x = "log(1+Species Richness)",
-           y = "log(1+CND Stability)") +
+      labs(x = "log(Species Richness)",
+           y = "log(CND Stability)") +
       scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
       theme_classic() +
       scale_color_manual(values = program_palette) +
