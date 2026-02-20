@@ -685,7 +685,8 @@ m1 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m4 <- brm(
@@ -694,7 +695,8 @@ m4 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 ### best fit single term model
@@ -706,7 +708,8 @@ m5 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m6 <- brm(
@@ -715,7 +718,8 @@ m6 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m7 <- brm(
@@ -724,7 +728,8 @@ m7 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m8 <- brm(
@@ -733,7 +738,8 @@ m8 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 ### model of interest, given across-ecosystem importance
@@ -745,7 +751,8 @@ m9 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m10 <- brm(
@@ -754,7 +761,8 @@ m10 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 model_table_all <- performance::compare_performance(m1,m4,m5,m6,m7,m8,m9,m10)
@@ -777,7 +785,8 @@ m41 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m45 <- brm(
@@ -786,7 +795,8 @@ m45 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m47 <- brm(
@@ -795,7 +805,8 @@ m47 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m48 <- brm(
@@ -804,7 +815,8 @@ m48 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m49 <- brm(
@@ -813,7 +825,8 @@ m49 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m40 <- brm(
@@ -822,7 +835,8 @@ m40 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 model_table_all <- performance::compare_performance(m41,m4,m45,m47,m48,m49,m40)
@@ -844,7 +858,8 @@ m451 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m457 <- brm(
@@ -853,7 +868,8 @@ m457 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m458 <- brm(
@@ -862,7 +878,8 @@ m458 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m459 <- brm(
@@ -871,7 +888,8 @@ m459 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 m450 <- brm(
@@ -880,7 +898,8 @@ m450 <- brm(
       prior = pr,
       warmup = 1000,
       iter = 10000,
-      chains = 4
+      chains = 4,
+      seed = 20
 )
 
 model_table_all <- performance::compare_performance(m45,m451,m457,m458,m459,m450)
@@ -1324,21 +1343,28 @@ summ_test <- dat |>
       )
 anova_mod <- aov(comm_n_stability ~ program, data = dat)
 summary(anova_mod)
-par(mfrow=c(2,2))
-plot(anova_mod)
+par(mfrow=c(2,2)); plot(anova_mod)
 oneway.test(comm_n_stability ~ program, data = dat)
 posthoc <- games_howell_test(dat, comm_n_stability ~ program)
-posthoc
-
-letters_df <- tribble(
-      ~program, ~letters,
-      "MCR",    "a",
-      "FCE",    "b",
-      "PCCC",   "b",
-      "PCCS",   "b",
-      "SBC",    "b,c",
-      "VCR",    "c"
-)
+pw <- posthoc |>
+      transmute(group1, group2, p.adj)
+pvec <- pw |>
+      mutate(comparison = paste(group1, group2, sep = "-")) |>
+      select(comparison, p.adj) |>
+      deframe()
+cld <- multcompLetters(pvec, threshold = 0.05)
+letters_df <- tibble(
+      program = names(cld$Letters),
+      letters = cld$Letters) |>
+      mutate(program = factor(program, levels = c("MCR","PCCS","FCE","PCCC","SBC","VCR"))) |>
+      arrange(program) |> 
+      mutate(
+            letters = chartr(
+                  old = "cabd",
+                  new = "abcd",
+                  letters
+            )
+      )
 letters_df
 
 letters <- letters_df |> 
@@ -1414,7 +1440,9 @@ dat |>
       geom_point(aes(x = log1p(richness), y = log1p(stability), color = program), size = 5, dat = summ) +
       # geom_point(aes(x = log(richness), y = log(stability), color = program), size = 5, dat = summ) +
       labs(x = "log(Species Richness)",
-           y = "log(CND Stability)") +
+           y = "log(CND Stability)",
+           fill = 'Program',
+           color = 'Program') +
       scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
       theme_classic() +
       scale_color_manual(values = program_palette) +
