@@ -640,6 +640,7 @@ summary(
       fit.measures = TRUE,
       rsquare = TRUE
 )
+
 # run across system model -------------------------------------------------
 keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit")
 rm(list = setdiff(ls(), keep))
