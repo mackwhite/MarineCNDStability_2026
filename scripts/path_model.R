@@ -145,20 +145,19 @@ summary(fit3, standardized = TRUE, fit.measures = TRUE)
 modificationIndices(fit3, sort = TRUE, maximum.number = 5)
 
 path_model_final <- '
-   # 1. Regressions
+   # Regressions
    comm_n_stability ~ cp*s_rich_mean + b1*spp_synchrony + b2*spp_turnover
    
    spp_synchrony  ~ a1*s_rich_mean
    
-   # ADDED: s_rich_mean now also predicts turnover (from MI 40)
    spp_turnover   ~ a2*t_rich_mean + d1*troph_turnover + a4*s_rich_mean
    
    troph_turnover ~ a3*t_rich_mean
 
-   # 2. Covariances
+   # Covariances
    s_rich_mean ~~ t_rich_mean
 
-   # 3. Indirect Effects
+   # Indirect Effects
    ind_rich_sync := a1 * b1
    ind_rich_turn := a4 * b2        # New indirect path
    ind_troph_turn := a3 * d1 * b2
@@ -169,69 +168,62 @@ fit_final <- sem(path_model_final, data = dat_ready)
 summary(fit_final, standardized = TRUE, fit.measures = TRUE)
 modificationIndices(fit_final, sort = TRUE, maximum.number = 3)
 
-cols <- c("royalblue", "firebrick")
-semPaths(fit_final, 
-         whatLabels = "std", 
-         layout = "tree", 
-         edge.label.cex = 1.2, 
-         edge.color = cols,      # Applies colors based on sign
-         posCol = "royalblue",   # Positive paths
-         negCol = "firebrick",   # Negative paths
-         fade = FALSE, 
-         residuals = FALSE,
-         sizeMan = 12, 
-         edge.width = 1.5,
-         style = "lisrel")
-saveRDS(fit_final, "output/fit_final_path.rds")
+# path_model_revised <- '
+#    # Regressions
+#    comm_n_stability ~ cp*s_rich_mean + b1*spp_synchrony + b2*spp_turnover
+#    
+#    spp_synchrony  ~ a1*s_rich_mean
+#    
+#    spp_turnover   ~ a2*t_rich_mean + d1*troph_turnover + a4*s_rich_mean
+#    
+#    troph_turnover ~ a3*t_rich_mean
+# 
+#    # Covariances
+#    s_rich_mean ~~ t_rich_mean
+#    troph_turnover ~ s_rich_mean
+# 
+#    # Indirect Effects 
+#    ind_rich_sync := a1 * b1
+#    ind_rich_turn := a4 * b2
+#    ind_troph_turn := a3 * d1 * b2
+# 
+#    ind_rich_troph_chain := a5 * d1 * b2
+# 
+#    total_rich_effect := cp + (a1 * b1) + (a4 * b2) + (a5 * d1 * b2)
+# '
+# 
+# fit_revised <- sem(path_model_revised, data = dat_ready, estimator = "MLR")
+# summary(fit_revised, standardized = TRUE, fit.measures = TRUE)
+# modificationIndices(fit_revised, sort = TRUE, maximum.number = 3)
 
-path_model_ultimate <- '
-   # 1. Regressions
-   comm_n_stability ~ cp*s_rich_mean + b1*spp_synchrony + b2*spp_turnover
-   
-   spp_synchrony  ~ a1*s_rich_mean
-   
-   spp_turnover   ~ a2*t_rich_mean + d1*troph_turnover + a4*s_rich_mean
-   
-   # ADDED: s_rich_mean now also predicts trophic turnover (from MI 45)
-   troph_turnover ~ a3*t_rich_mean + a5*s_rich_mean
+# help from nate lemoine --------------------------------------------------
 
-   # 2. Covariances
-   s_rich_mean ~~ t_rich_mean
+path_model_revised <- '
+   # Regressions
+   comm_n_stability ~ cp*s_rich_mean + b1*spp_synchrony + b2*spp_turnover + b3*troph_turnover
+   
+   spp_synchrony    ~ a1*s_rich_mean
+   
+   spp_turnover     ~ a2*t_rich_mean + a4*s_rich_mean
+   
+   troph_turnover   ~ a3*t_rich_mean
 
-   # 3. Indirect Effects (Updated to include the new chain)
-   ind_rich_sync := a1 * b1
-   ind_rich_turn := a4 * b2
-   ind_troph_turn := a3 * d1 * b2
-   
-   # New indirect path: s_rich -> troph_turn -> spp_turn -> stability
-   ind_rich_troph_chain := a5 * d1 * b2 
-   
-   total_rich_effect := cp + (a1 * b1) + (a4 * b2) + (a5 * d1 * b2)
+   # Covariances
+   s_rich_mean      ~~ t_rich_mean
+   spp_synchrony    ~~ troph_turnover
+   troph_turnover   ~~ s_rich_mean
+   spp_turnover     ~~ troph_turnover
+
+   # Indirect Effects 
+   # ind_rich_sync := a1 * b1
+   # ind_rich_turn := a4 * b2
+   # ind_troph_turn := a3 * b2
+
+   # total_rich_effect := cp + (a1 * b1) + (a4 * b2)
+   # total_rich_effect := cp + ind_rich_sync + ind_rich_turn
+
 '
 
-# Use the Robust Estimator (MLR) to give the Chi-Square its best chance
-fit_ultimate <- sem(path_model_ultimate, data = dat_ready, estimator = "MLR")
-summary(fit_ultimate, standardized = TRUE, fit.measures = TRUE)
-
-# Customizing node labels for clarity
-node_labels <- c("S. Richness", "T. Richness", "Synchrony", 
-                 "T. Turnover", "S. Turnover", "Stability")
-
-# Define colors: Blue for positive, Red for negative
-# Path coefficients: cp(+), a1(-), a2(-), d1(+), a4(+), a3(-), a5(+), b1(-), b2(-)
-semPaths(fit_ultimate, 
-         whatLabels = "std", 
-         layout = "tree",       
-         rotation = 2,         
-         edge.label.cex = 1.1, 
-         sizeMan = 12, 
-         sizeLat = 10,
-         color = "lightgrey", 
-         edge.color = "black", 
-         edge.width = 1.5,
-         posCol = "blue",       
-         negCol = "red",        
-         fade = FALSE, 
-         residuals = FALSE, 
-         intercepts = FALSE)
-inspect(fit_ultimate, "rsquare")
+fit_revised <- sem(path_model_revised, data = dat_ready, estimator = "MLR")
+summary(fit_revised, standardized = TRUE, fit.measures = TRUE)
+modificationIndices(fit_revised, sort = TRUE, maximum.number = 3)
