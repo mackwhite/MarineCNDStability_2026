@@ -221,16 +221,16 @@ node_labels <- c("S. Richness", "T. Richness", "Synchrony",
 # Path coefficients: cp(+), a1(-), a2(-), d1(+), a4(+), a3(-), a5(+), b1(-), b2(-)
 semPaths(fit_ultimate, 
          whatLabels = "std", 
-         layout = "tree",       # Organized hierarchy from top to bottom
-         rotation = 2,          # Rotates to flow left-to-right
+         layout = "tree",       
+         rotation = 2,         
          edge.label.cex = 1.1, 
          sizeMan = 12, 
          sizeLat = 10,
          color = "lightgrey", 
          edge.color = "black", 
          edge.width = 1.5,
-         posCol = "blue",       # Custom positive color
-         negCol = "red",        # Custom negative color
+         posCol = "blue",       
+         negCol = "red",        
          fade = FALSE, 
          residuals = FALSE, 
          intercepts = FALSE)
