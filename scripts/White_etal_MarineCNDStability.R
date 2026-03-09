@@ -9,7 +9,7 @@
 # install.packages("librarian")
 librarian::shelf(tidyverse, vegan, readxl, splitstackshape, codyn, lavaan,
                  MuMIn, corrplot, performance, ggeffects, ggpubr, parameters, ggstats,
-                 brms, mixedup, rstatix, sf, ggspatial, waldo, multcompView)
+                 brms, mixedup, rstatix, sf, ggspatial, waldo, multcompView, tidySEM)
 
 ### set custom functions
 nacheck <- function(df) {
@@ -651,15 +651,31 @@ dat_ready |>
             values_from = value
       )
 
+# review correlation structure
+num_vars <- dat_ready |> 
+      dplyr::select(
+            comm_n_stability,
+            s_rich_mean, s_div_mean, spp_turnover, spp_synchrony,
+            t_rich_mean, t_div_mean, troph_turnover, troph_synchrony
+      )
+
+m <- cor(num_vars, use = "complete.obs")
+corrplot(m, 
+         method = "circle",      
+         type = "upper",         
+         addCoef.col = "black",  
+         tl.col = "black",       
+         diag = FALSE)
+
 path_model <- '
    # Regressions
    comm_n_stability ~ cp*s_rich_mean + b1*spp_synchrony + b2*spp_turnover + b3*troph_turnover
    
    spp_synchrony    ~ a1*s_rich_mean
    
-   spp_turnover     ~ a2*t_rich_mean + a4*s_rich_mean
+   spp_turnover     ~ a2*t_rich_mean + a3*s_rich_mean
    
-   troph_turnover   ~ a3*t_rich_mean
+   troph_turnover   ~ a4*t_rich_mean
 
    # Covariances
    s_rich_mean      ~~ t_rich_mean
@@ -669,13 +685,16 @@ path_model <- '
 
    # Indirect Effects 
    ### indirect effect of species richness through species synchrony
-   ind_rich_sync := a1 * b1
+   ind_srich_ssync := a1 * b1
+   
    ### indirect effect of species richness through species turnover
-   ind_rich_turn := a4 * b2
+   ind_srich_sturn := a3 * b2
+   
    ### indirect effect of trophic richness through trophic turnover
-   ind_troph_turn := a3 * b3
+   ind_trich_tturn := a4 * b3
+   
    ### cumulative effect of species richness (direct and indirect paths)
-   total_rich_effect := cp + ind_rich_sync + ind_rich_turn
+   total_srich_effect := cp + ind_srich_ssync + ind_srich_sturn
 '
 
 # MLR (Maximum Likelihood with Robust standard errors) estimator used for robustness to non-normality in scaled continuous outcomes
@@ -683,6 +702,45 @@ fit <- sem(path_model, data = dat_ready, estimator = "MLR")
 summary(fit, standardized = TRUE, fit.measures = TRUE)
 # no indices exceeded mi = 10, supporting retention of the - indicates no need to reform model structure
 modindices(fit, sort = TRUE, maximum.number = 10)
+# extract R-squared values for all endogenous variables
+lavInspect(fit, "r2")
+
+# visualize model here, but fit in .ppt for paper
+lay <- get_layout(
+      "s_rich_mean",    "",                  "t_rich_mean",               
+      "spp_synchrony",  "spp_turnover",      "troph_turnover", 
+      "",               "comm_n_stability",  "",             
+      rows = 3
+)
+
+graph <- prepare_graph(
+      model  = fit,
+      layout = lay,
+      label  = "est_sig_std"
+)
+
+edges <- graph$edges
+edges <- edges |>
+      filter(op != "~~" | lhs == rhs)
+graph$edges <- edges
+
+graph <- edit_edges(graph,
+                    linetype  = "solid",
+                    linewidth = ifelse(abs(est) > 0.3, 1.5, 0.8)
+)
+
+graph <- edit_nodes(graph,
+                    fill  = "white",
+                    color = "black"
+)
+
+p <- plot(graph) +
+      theme_void() +
+      theme(
+            plot.background = element_rect(fill = "white", color = NA),
+            plot.margin     = margin(20, 20, 20, 20)
+      )
+p
 
 ##################################################################################################
 ##################################################################################################
