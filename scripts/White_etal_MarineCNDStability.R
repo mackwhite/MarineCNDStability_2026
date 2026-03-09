@@ -619,27 +619,57 @@ glimpse(dat_scaled)
 dat_ready <- dat_scaled      
 glimpse(dat_ready)
 
+# path_model <- '
+#   # Structural equations for the path model
+#   comm_n_stability ~ s_rich_mean + troph_turnover + spp_turnover + spp_synchrony  # Stability regressed on Richness, Trophic Turnover, Pop. Turnover, Synchrony
+#   spp_turnover     ~ s_rich_mean + t_rich_mean                                    # Population Turnover regressed on Species Richness and Trophic Richness
+#   spp_synchrony    ~ s_div_mean + s_rich_mean + t_div_mean                        # Population Synchrony on Species Evenness, Species Richness, Trophic Evenness
+# 
+#   # Label specific paths to calculate indirect effects
+#   spp_synchrony ~ a_se*s_div_mean                                                 # a_se: effect of Species Evenness on Synchrony
+#   comm_n_stability ~ b_syn*spp_synchrony                                          # b_syn: effect of Synchrony on Stability
+# 
+#   # Define the indirect effect of Species Evenness on Stability via Synchrony
+#   indirect_evenness := a_se * b_syn
+# '
+# 
+# fit <- sem(path_model, data = dat_ready)
+# summary(
+#       fit,
+#       standardized = TRUE,
+#       fit.measures = TRUE,
+#       rsquare = TRUE
+# )
+
 path_model <- '
-  # Structural equations for the path model
-  comm_n_stability ~ s_rich_mean + troph_turnover + spp_turnover + spp_synchrony  # Stability regressed on Richness, Trophic Turnover, Pop. Turnover, Synchrony
-  spp_turnover     ~ s_rich_mean + t_rich_mean                                    # Population Turnover regressed on Species Richness and Trophic Richness
-  spp_synchrony    ~ s_div_mean + s_rich_mean + t_div_mean                        # Population Synchrony on Species Evenness, Species Richness, Trophic Evenness
+   # Regressions
+   comm_n_stability ~ cp*s_rich_mean + b1*spp_synchrony + b2*spp_turnover + b3*troph_turnover
+   
+   spp_synchrony    ~ a1*s_rich_mean
+   
+   spp_turnover     ~ a2*t_rich_mean + a4*s_rich_mean
+   
+   troph_turnover   ~ a3*t_rich_mean
 
-  # Label specific paths to calculate indirect effects
-  spp_synchrony ~ a_se*s_div_mean                                                 # a_se: effect of Species Evenness on Synchrony
-  comm_n_stability ~ b_syn*spp_synchrony                                          # b_syn: effect of Synchrony on Stability
+   # Covariances
+   s_rich_mean      ~~ t_rich_mean
+   spp_synchrony    ~~ troph_turnover
+   troph_turnover   ~~ s_rich_mean
+   spp_turnover     ~~ troph_turnover
 
-  # Define the indirect effect of Species Evenness on Stability via Synchrony
-  indirect_evenness := a_se * b_syn
+   # Indirect Effects 
+   # ind_rich_sync := a1 * b1
+   # ind_rich_turn := a4 * b2
+   # ind_troph_turn := a3 * b2
+
+   # total_rich_effect := cp + (a1 * b1) + (a4 * b2)
+   # total_rich_effect := cp + ind_rich_sync + ind_rich_turn
+
 '
 
-fit <- sem(path_model, data = dat_ready)
-summary(
-      fit,
-      standardized = TRUE,
-      fit.measures = TRUE,
-      rsquare = TRUE
-)
+fit <- sem(path_model, data = dat_ready, estimator = "MLR")
+summary(fit, standardized = TRUE, fit.measures = TRUE)
+# modificationIndices(fit, sort = TRUE, maximum.number = 3)
 
 # run across system model -------------------------------------------------
 keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit")
