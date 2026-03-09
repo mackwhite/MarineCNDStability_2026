@@ -7,9 +7,9 @@
 # Housekeeping ------------------------------------------------------------
 ### load necessary libraries
 # install.packages("librarian")
-librarian::shelf(tidyverse, vegan, readxl, dplyr, splitstackshape, codyn, lavaan,
+librarian::shelf(tidyverse, vegan, readxl, splitstackshape, codyn, lavaan,
                  MuMIn, corrplot, performance, ggeffects, ggpubr, parameters, ggstats,
-                 brms, mixedup, rstatix, sf, ggspatial)
+                 brms, mixedup, rstatix, sf, ggspatial, waldo, multcompView)
 
 ### set custom functions
 nacheck <- function(df) {
@@ -18,7 +18,10 @@ nacheck <- function(df) {
 }
 
 # Load and prepare data ----------------------------------------------------
-dt <- read.csv(file.path("tier2", "harmonized_consumer_excretion_CLEAN.csv"),stringsAsFactors = F,na.strings =".") |> 
+dt <- read.csv(file.path("tier2", "harmonized_consumer_excretion_CLEAN.csv"),
+               stringsAsFactors = F,
+               ### all NAs were inititally transformed to '.'
+               na.strings =".") |> 
       
       # tidy up column names
       janitor::clean_names() |> 
@@ -84,14 +87,15 @@ dt1 <- dt_ab |>
       filter(phylum == 'Chordata',
              order != 'Decapoda') |> 
       
-      # set upper end for California Moray eel 
+      # set upper end for California Moray eel based on reported maximum weight
       mutate(
             dmperind_g_ind = case_when(
                   dmperind_g_ind > 9071 & scientific_name == "Gymnothorax mordax" ~ 9071,
                   TRUE ~ dmperind_g_ind
             )) |> 
       
-      # pull out big schools of fishes 
+      # remove extraordinary large schools of fish [lost < 0.0001 % of data]
+      # FCE doesn't catch thousands of fish per transect, so fine for this given variable area measurements (i.e., electrofishing program)
       mutate(
             area = case_when(
                   project == 'CoastalCA' ~ 60,
@@ -103,10 +107,10 @@ dt1 <- dt_ab |>
             ),
             count = area*density_num_m2
       ) |> 
-      filter(project == "FCE" | count <10000) |> # FCE doesn't catch thousands of fish per transect
+      filter(project == "FCE" | count <10000) |> 
       select(-area, -count) |> 
       
-      # pull out 'biomass buster' sharks and rays from CoastalCA, SBC, and MCR
+      # remove 'biomass buster' sharks and rays from CoastalCA, SBC, and MCR [lost < 0.01% of data]
       group_by(project, habitat) |> 
       mutate(
             mean_dmperind = mean(dmperind_g_ind, na.rm = TRUE),
@@ -121,17 +125,16 @@ dt1 <- dt_ab |>
       filter(!(outlier & (sharkray | elasmo))) |> 
       select(-mean_dmperind, -sd_dmperind, -lower_bound, -upper_bound, -outlier, -sharkray, -elasmo) |> 
       
-      # coalesce density columns 
+      # coalesce density columns and remove unnecessary '..m3' column
       mutate(density = coalesce(density_num_m, density_num_m2)) |> 
       select(-density_num_m, -density_num_m2, -density_num_m3) |> 
       
-      # filter out high densities of large-bodied fishes that interrupt ts
+      # remove high density of large-bodied fish observations that skew entire time series [lost < 0.01% of data]
       filter(!(density > 1 & nind_ug_hr > 20000))
 glimpse(dt1)
 nacheck(dt1)
 head(dt1)
 rm(dt, dta, dtb1, dtb2, dtb, dt_ab)
-
 
 ##################################################################################################
 ##################################################################################################
@@ -178,6 +181,7 @@ dt2_mcr <- dt1 |>
             species_dens = sum(dens),
             .groups = 'drop'
       ) |> 
+      # subsite_level3 set to '15' to denote combined transects 1 and 5
       mutate(subsite_level3 = '15') |> 
       select(project, habitat, year, month, site, subsite_level1, subsite_level2, subsite_level3,
              scientific_name, species_n, species_bm, species_dens)
@@ -270,6 +274,8 @@ dt3_sp <- dt2 |>
             total_dens       = sum(species_dens, na.rm = TRUE),
             .groups = "drop"
       ) |> 
+      # Inf occurs at transects with zero observed species (density = 0 rows);
+      # set to 0 to indicate absence of diversity
       mutate(
             inv_simpson = case_when(
                   inv_simpson == Inf ~ 0,
@@ -331,6 +337,7 @@ dt2_mcr_troph <- dt1 |>
             troph_dens = sum(dens),
             .groups = 'drop'
       ) |> 
+      # subsite_level3 set to '15' to denote combined transects 1 and 5
       mutate(subsite_level3 = '15') |> 
       select(project, habitat, year, month, site, subsite_level1, subsite_level2, subsite_level3,
              diet_cat, troph_n, troph_bm, troph_dens)
@@ -368,7 +375,7 @@ head(dt2_troph)
 nacheck(dt2_troph)
 rm(dt2_mcr_troph, dt2_other_troph)
 
-## Calculating Species Richness ----
+## Calculating Trophic Richness ----
 head(dt2_troph)
 glimpse(dt2_troph)
 nacheck(dt2_troph)
@@ -382,6 +389,8 @@ dt3_troph <- dt2_troph |>
             total_dens_troph       = sum(troph_dens, na.rm = TRUE),
             .groups = "drop"
       ) |> 
+      # Inf occurs at transects with zero observed trophic groups (density = 0 rows);
+      # set to 0 to indicate absence of diversity
       mutate(
             inv_simpson_troph = case_when(
                   inv_simpson_troph == Inf ~ 0,
@@ -494,7 +503,7 @@ spp_dyn_model_data <- dt3_sp_dyn |>
                         species.var   = "scientific_name",
                         metric        = "total"
                   )
-                  mean(beta_temp[, 1], na.rm = TRUE)
+                  mean(beta_temp$total, na.rm = TRUE)
             }),
             spp_synchrony = map_dbl(data, ~{
                   synchrony(
@@ -611,35 +620,36 @@ glimpse(model_data_all)
 dat_scaled <- model_data_all |> 
       rename(program = project) |> 
       select(program, site, comm_n_stability, everything()) |> 
+      
+      # scale response metric
       mutate(comm_n_stability = as.numeric(scale(comm_n_stability))) |>
+      
+      # scale suite of predictor metrics 
       mutate(across(comm_n_mean:troph_synchrony, \(x) as.numeric(scale(x, center = TRUE))))
 glimpse(dat_scaled)      
-
-glimpse(dat_scaled)
 dat_ready <- dat_scaled      
 glimpse(dat_ready)
 
-# path_model <- '
-#   # Structural equations for the path model
-#   comm_n_stability ~ s_rich_mean + troph_turnover + spp_turnover + spp_synchrony  # Stability regressed on Richness, Trophic Turnover, Pop. Turnover, Synchrony
-#   spp_turnover     ~ s_rich_mean + t_rich_mean                                    # Population Turnover regressed on Species Richness and Trophic Richness
-#   spp_synchrony    ~ s_div_mean + s_rich_mean + t_div_mean                        # Population Synchrony on Species Evenness, Species Richness, Trophic Evenness
-# 
-#   # Label specific paths to calculate indirect effects
-#   spp_synchrony ~ a_se*s_div_mean                                                 # a_se: effect of Species Evenness on Synchrony
-#   comm_n_stability ~ b_syn*spp_synchrony                                          # b_syn: effect of Synchrony on Stability
-# 
-#   # Define the indirect effect of Species Evenness on Stability via Synchrony
-#   indirect_evenness := a_se * b_syn
-# '
-# 
-# fit <- sem(path_model, data = dat_ready)
-# summary(
-#       fit,
-#       standardized = TRUE,
-#       fit.measures = TRUE,
-#       rsquare = TRUE
-# )
+# checking skewness and kurtosis of predictor metrics nested in path model
+# thresholds: |skewness| <= 2 and kurtosis <= 7 indicate acceptable normality (Kline 2016; West, Finch & Curran 1995)
+# values exceeding threshold justify use of MLR estimation
+dat_ready |>
+      select(comm_n_stability, spp_synchrony, 
+             spp_turnover, troph_turnover) |>
+      summarise(across(everything(), list(
+            skew = skewness,
+            kurt = kurtosis
+      ))) |>
+      pivot_longer(
+            everything(),
+            names_to  = c("variable", "metric"),
+            names_sep = "_(?=[^_]+$)",
+            values_to = "value"
+      ) |>
+      pivot_wider(
+            names_from  = metric,
+            values_from = value
+      )
 
 path_model <- '
    # Regressions
@@ -658,20 +668,36 @@ path_model <- '
    spp_turnover     ~~ troph_turnover
 
    # Indirect Effects 
-   # ind_rich_sync := a1 * b1
-   # ind_rich_turn := a4 * b2
-   # ind_troph_turn := a3 * b2
-
-   # total_rich_effect := cp + (a1 * b1) + (a4 * b2)
-   # total_rich_effect := cp + ind_rich_sync + ind_rich_turn
-
+   ### indirect effect of species richness through species synchrony
+   ind_rich_sync := a1 * b1
+   ### indirect effect of species richness through species turnover
+   ind_rich_turn := a4 * b2
+   ### indirect effect of trophic richness through trophic turnover
+   ind_troph_turn := a3 * b3
+   ### cumulative effect of species richness (direct and indirect paths)
+   total_rich_effect := cp + ind_rich_sync + ind_rich_turn
 '
 
+# MLR (Maximum Likelihood with Robust standard errors) estimator used for robustness to non-normality in scaled continuous outcomes
 fit <- sem(path_model, data = dat_ready, estimator = "MLR")
 summary(fit, standardized = TRUE, fit.measures = TRUE)
-# modificationIndices(fit, sort = TRUE, maximum.number = 3)
+# no indices exceeded mi = 10, supporting retention of the - indicates no need to reform model structure
+modindices(fit, sort = TRUE, maximum.number = 10)
 
-# run across system model -------------------------------------------------
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+# Run within system model ------------------------------------------------------------------------
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+##################################################################################################
+
 keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit")
 rm(list = setdiff(ls(), keep))
 
@@ -679,16 +705,40 @@ glimpse(model_data_all)
 dat_scaled <- model_data_all |> 
       rename(program = project) |> 
       select(program, site, comm_n_stability, everything()) |> 
+      
+      # comm_n_stability scaled globally (outcome); predictors scaled within-program
       mutate(comm_n_stability = as.numeric(scale(comm_n_stability))) |>
+      
+      # scaling predictors within program to control for between-program differences (i.e., across vs. within)
+      # in baseline community metrics; coefficients reflect within-program
+      # standardized effects
       group_by(program) |> 
       mutate(across(comm_n_mean:troph_synchrony, \(x) as.numeric(scale(x, center = TRUE)))) |> 
       ungroup()
 glimpse(dat_scaled)      
-glimpse(dat_scaled)
 dat_ready <- dat_scaled      
 glimpse(dat_ready)
 
-### set priors following Lemoine (2019, Ecology)
+# checking skewness and kurtosis of predictor metric in brms model
+# thresholds: |skewness| <= 2 and kurtosis <= 7 indicate acceptable normality (Kline 2016; West, Finch & Curran 1995)
+dat_ready |>
+      select(comm_n_stability) |>
+      summarise(across(everything(), list(
+            skew = skewness,
+            kurt = kurtosis
+      ))) |>
+      pivot_longer(
+            everything(),
+            names_to  = c("variable", "metric"),
+            names_sep = "_(?=[^_]+$)",  # splits on last underscore
+            values_to = "value"
+      ) |>
+      pivot_wider(
+            names_from  = metric,
+            values_from = value
+      )
+
+# normal(0,1) weakly informative prior appropriate for standardized predictors - following Lemoine (2019, Ecology)
 pr = prior(normal(0, 1), class = 'b')
 
 ##################################################################################################
@@ -709,7 +759,11 @@ matrix <- cor(test_corr, use = 'complete.obs')
 corrplot(matrix, method = "number", type = "lower", tl.col = "black", tl.srt = 45)
 glimpse(dat_ready)
 
+##################################################################################################
 ### round one ------------------------------------------------------------------------------------
+##################################################################################################
+
+### round one: single-term models to identify best individual predictor
 m1 <- brm(
       comm_n_stability ~ t_rich_mean + (t_rich_mean | program),
       data = dat_ready,
@@ -801,15 +855,15 @@ model_table_all <- performance::compare_performance(m1,m4,m5,m6,m7,m8,m9,m10)
 model_selection1 <- model_table_all |>
       mutate(dWAIC = WAIC - min(WAIC))
 
-write_csv(model_selection1, "output/tables/brms-fullmodel-selection-table-roundone.csv")
+# write_csv(model_selection1, "output/tables/brms-fullmodel-selection-table-roundone.csv")
 
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", "palette", 'm4', 'model_selection1')
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm4', 'model_selection1')
 rm(list = setdiff(ls(), keep))
 
 ##################################################################################################
 ### round two ------------------------------------------------------------------------------------
 ##################################################################################################
-
+### round two: add spp_synchrony (best round one model) to all other predictors
 m41 <- brm(
       comm_n_stability ~ t_rich_mean + spp_synchrony + (t_rich_mean + spp_synchrony | program),
       data = dat_ready,
@@ -876,12 +930,13 @@ model_selection2 <- model_table_all |>
       mutate(dWAIC = WAIC - min(WAIC))
 write_csv(model_selection2, "output/tables/brms-fullmodel-selection-table-roundtwo.csv")
 
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", "palette", 'm45', 'model_selection1', 'model_selection2')
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm45', 'model_selection1', 'model_selection2')
 rm(list = setdiff(ls(), keep))
 
 ##################################################################################################
 ### round three ----------------------------------------------------------------------------------
 ##################################################################################################
+### round three: add spp_turnover (best round two model) to spp_synchrony + one additional predictor
 
 m451 <- brm(
       comm_n_stability ~ t_rich_mean + spp_turnover + spp_synchrony + (t_rich_mean + spp_turnover + spp_synchrony | program),
@@ -939,12 +994,12 @@ model_selection3 <- model_table_all |>
       mutate(dWAIC = WAIC - min(WAIC))
 write_csv(model_selection3, "output/tables/brms-fullmodel-selection-table-roundthree.csv")
 
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", "palette", 'm45', 'model_selection1', 'model_selection2', 'model_selection3')
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm45', 'model_selection1', 'model_selection2', 'model_selection3')
 rm(list = setdiff(ls(), keep))
 full_model <- m45
+
 saveRDS(full_model, file = 'local_data/rds-full-model.rds')
 
-##################################################################################################
 ##################################################################################################
 ##################################################################################################
 ### Visualize Models -----------------------------------------------------------------------------
@@ -961,7 +1016,7 @@ rich = readRDS("local_data/rds-single-richness.rds")
 glimpse(dat_ready)
 
 # stats ----
-p_synch = posterior_samples(synch)
+p_synch = as_draws_df(synch)
 glimpse(p_synch)
 mean(p_synch$`r_program[PCCC,spp_synchrony]` + p_synch$b_spp_synchrony  < 0)
 mean(p_synch$`r_program[SBC,spp_synchrony]`  + p_synch$b_spp_synchrony  < 0)
@@ -970,7 +1025,7 @@ mean(p_synch$`r_program[PCCS,spp_synchrony]` + p_synch$b_spp_synchrony  < 0)
 mean(p_synch$`r_program[MCR,spp_synchrony]`  + p_synch$b_spp_synchrony  < 0)
 mean(p_synch$`r_program[FCE,spp_synchrony]`  + p_synch$b_spp_synchrony  < 0)
 
-p_sr = posterior_samples(rich)
+p_sr = as_draws_df(rich)
 mean(p_sr$`r_program[PCCC,s_rich_mean]` + p_sr$b_s_rich_mean > 0)
 mean(p_sr$`r_program[SBC,s_rich_mean]`  + p_sr$b_s_rich_mean > 0)
 mean(p_sr$`r_program[VCR,s_rich_mean]`  + p_sr$b_s_rich_mean > 0)
@@ -1035,6 +1090,8 @@ dat <-model_data_all |>
       distinct() |> 
       group_by(program) |> 
       mutate(scaled = scale(value)) |>  
+      # extract min and max predictor values per program
+      # sufficient for linear prediction lines
       slice(c(which.min(value), which.max(value))) |> 
       ungroup() |> 
       bind_rows(ov)
@@ -1053,6 +1110,8 @@ raw <-model_data_all |>
 df <- dat_scaled |> 
       left_join(df_eq) |> 
       mutate(pred = beta*scaled + Intercept,
+             # back-transform predictions to raw stability scale
+             # reverses z-scoring: pred * SD + mean
              stab = pred*sd(raw$stab) + mean(raw$stab)) |> 
       left_join(dat) |> 
       mutate(program = factor(program, levels = prog))
@@ -1186,7 +1245,6 @@ b <- ggplot(df_beta|> filter(program != 'Overall'), aes(program, value, color = 
       geom_pointrange(aes(ymin = lower_2.5, ymax = upper_97.5), linewidth = 1, size = .9) +
       labs(y = 'Beta', x = NULL) +
       scale_color_manual(values = program_palette) +
-      # scale_y_continuous(limits = c(-0.35, 1.03)) +
       coord_flip() +
       theme_classic() +
       theme(axis.text.x = element_text(face = "bold", color = "black", size = 12),
@@ -1213,42 +1271,38 @@ ggsave('output/fig3.png', dpi = 600, units= 'in', height = 6, width = 6)
 full_model = readRDS('local_data/rds-full-model.rds')
 
 #summary stats -----
-post = posterior_samples(full_model)
-
+post = as_draws_df(full_model)
 mean(post$`r_program[MCR,spp_synchrony]`+ post$b_spp_synchrony < 0)
 mean(post$`r_program[MCR,spp_turnover]` + post$b_spp_turnover < 0)
+
 mean(post$`r_program[PCCS,spp_synchrony]`+ post$b_spp_synchrony < 0)
 mean(post$`r_program[PCCS,spp_turnover]` + post$b_spp_turnover < 0)
+
 mean(post$`r_program[FCE,spp_synchrony]`+ post$b_spp_synchrony < 0)
-mean(post$`r_program[FCE,spp_turnover]` + post$b_spp_turnover > 0)
-mean(post$`r_program[PCCC,spp_synchrony]`+ post$b_spp_synchrony > 0)
+mean(post$`r_program[FCE,spp_turnover]` + post$b_spp_turnover < 0)
+
+mean(post$`r_program[PCCC,spp_synchrony]`+ post$b_spp_synchrony < 0)
 mean(post$`r_program[PCCC,spp_turnover]` + post$b_spp_turnover < 0)
+
 mean(post$`r_program[SBC,spp_synchrony]`+ post$b_spp_synchrony < 0)
 mean(post$`r_program[SBC,spp_turnover]` + post$b_spp_turnover < 0)
+
 mean(post$`r_program[VCR,spp_synchrony]`+ post$b_spp_synchrony < 0)
 mean(post$`r_program[VCR,spp_turnover]` + post$b_spp_turnover < 0)
 
 # random effects
 re95 = mixedup::extract_random_coefs(full_model, ci_level = c(0.95))
 re80 = mixedup::extract_random_coefs(full_model, ci_level = c(0.8))
-re90 = mixedup::extract_random_coefs(full_model, ci_level = c(0.9))
-re50 = mixedup::extract_random_coefs(full_model, ci_level = c(0.5))
 
 re_beta = left_join(re95, re80) |> 
-      left_join(re90) |> 
-      left_join(re50)|> 
       rename(term = effect,
              program = group)
 
 # fixed effects
 fe95 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.95))
 fe80 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.8))
-fe90 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.9))
-fe50 = mixedup::extract_fixed_effects(full_model, ci_level = c(0.5))
 
 fe_beta = left_join(fe95, fe80) |> 
-      left_join(fe90) |> 
-      left_join(fe50) |> 
       mutate(program = 'Overall') 
 
 # make data frame of all betas
@@ -1372,10 +1426,13 @@ summ_test <- dat |>
             mean = mean(comm_n_stability, na.rm = TRUE),
             median = median(comm_n_stability, na.rm = TRUE)
       )
-anova_mod <- aov(comm_n_stability ~ program, data = dat)
-summary(anova_mod)
-par(mfrow=c(2,2)); plot(anova_mod)
+
+# test for homogeneity of variance across programs
+# significant result justifies Welch's ANOVA and Games-Howell post-hoc
+car::leveneTest(comm_n_stability ~ factor(program), data = dat)
 oneway.test(comm_n_stability ~ program, data = dat)
+
+# Games-Howell post-hoc — appropriate for unequal variances and sample sizes
 posthoc <- games_howell_test(dat, comm_n_stability ~ program)
 pw <- posthoc |>
       transmute(group1, group2, p.adj)
@@ -1384,11 +1441,14 @@ pvec <- pw |>
       select(comparison, p.adj) |>
       deframe()
 cld <- multcompLetters(pvec, threshold = 0.05)
+
 letters_df <- tibble(
       program = names(cld$Letters),
       letters = cld$Letters) |>
       mutate(program = factor(program, levels = c("MCR","PCCS","FCE","PCCC","SBC","VCR"))) |>
       arrange(program) |> 
+      # remap CLD letters to alphabetical order for readability
+      # WARNING: if data changes, verify cld$Letters output before updating chartr mapping
       mutate(
             letters = chartr(
                   old = "cabd",
@@ -1445,12 +1505,6 @@ ggsave("output/figure-one.png", units = "in", width = 4,
 ##################################################################################################
 ### Simple Regression ----------------------------------------------------------------------------
 ##################################################################################################
-glimpse(dat)
-model <- lm(log1p(comm_n_stability) ~ log1p(s_rich_mean), data = dat)
-summary(model)$r.squared 
-summary(model)
-r2 <- summary(model)$r.squared
-r2
 
 summ <- dat |>
       group_by(program) |> 
@@ -1465,14 +1519,11 @@ r2_summ
 
 dat |>
       ggplot(aes(x = log1p(s_rich_mean), y = log1p(comm_n_stability))) +
-      # ggplot(aes(x = log(s_rich_mean), y = log(comm_n_stability))) +
       geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
       geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
       geom_point(aes(x = log1p(richness), y = log1p(stability), color = program), size = 5, dat = summ) +
-      # geom_point(aes(x = log(richness), y = log(stability), color = program), size = 5, dat = summ) +
-      labs(x = "log(Species Richness)",
-           y = "log(CND Stability)",
-           fill = 'Program',
+      labs(x = "log(Species Richness + 1)",
+           y = "log(CND Stability + 1)",
            color = 'Program') +
       scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
       theme_classic() +
