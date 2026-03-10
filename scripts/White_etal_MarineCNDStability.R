@@ -3,6 +3,7 @@
 ###goal(s): Wrangling and summarizing raw CND data such that it is ready for analysis
 ###date(s): Summer 2024, Revised Spring 2026
 ###note(s): 
+# L759-1059 commented out - undo to run within-ecosystem models
 
 # Housekeeping ------------------------------------------------------------
 ### load necessary libraries
@@ -756,307 +757,307 @@ p
 ##################################################################################################
 ##################################################################################################
 
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit")
-rm(list = setdiff(ls(), keep))
-
-glimpse(model_data_all)
-dat_scaled <- model_data_all |> 
-      rename(program = project) |> 
-      select(program, site, comm_n_stability, everything()) |> 
-      
-      # comm_n_stability scaled globally (outcome); predictors scaled within-program
-      mutate(comm_n_stability = as.numeric(scale(comm_n_stability))) |>
-      
-      # scaling predictors within program to control for between-program differences (i.e., across vs. within)
-      # in baseline community metrics; coefficients reflect within-program
-      # standardized effects
-      group_by(program) |> 
-      mutate(across(comm_n_mean:troph_synchrony, \(x) as.numeric(scale(x, center = TRUE)))) |> 
-      ungroup()
-glimpse(dat_scaled)      
-dat_ready <- dat_scaled      
-glimpse(dat_ready)
-
-# checking skewness and kurtosis of predictor metric in brms model
-# thresholds: |skewness| <= 2 and kurtosis <= 7 indicate acceptable normality (Kline 2016; West, Finch & Curran 1995)
-dat_ready |>
-      select(comm_n_stability) |>
-      summarise(across(everything(), list(
-            skew = skewness,
-            kurt = kurtosis
-      ))) |>
-      pivot_longer(
-            everything(),
-            names_to  = c("variable", "metric"),
-            names_sep = "_(?=[^_]+$)",  # splits on last underscore
-            values_to = "value"
-      ) |>
-      pivot_wider(
-            names_from  = metric,
-            values_from = value
-      )
-
-# normal(0,1) weakly informative prior appropriate for standardized predictors - following Lemoine (2019, Ecology)
-pr = prior(normal(0, 1), class = 'b')
-
-##################################################################################################
-##################################################################################################
-##################################################################################################
-### Full Models ----------------------------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
-
-test_corr <- dat_ready |> select(s_rich_mean, s_div_mean,
-                                 t_rich_mean, t_div_mean,
-                                 spp_turnover, spp_synchrony,
-                                 troph_turnover, troph_synchrony)
-
-matrix <- cor(test_corr, use = 'complete.obs')
-
-corrplot(matrix, method = "number", type = "lower", tl.col = "black", tl.srt = 45)
-glimpse(dat_ready)
-
-##################################################################################################
-### round one ------------------------------------------------------------------------------------
-##################################################################################################
-
-### round one: single-term models to identify best individual predictor
-m1 <- brm(
-      comm_n_stability ~ t_rich_mean + (t_rich_mean | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m4 <- brm(
-      comm_n_stability ~ spp_synchrony + (spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-### best fit single term model
-# saveRDS(m4, file = 'local_data/rds-single-synchrony.rds')
-
-m5 <- brm(
-      comm_n_stability ~ spp_turnover + (spp_turnover | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m6 <- brm(
-      comm_n_stability ~ troph_synchrony + (troph_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m7 <- brm(
-      comm_n_stability ~ troph_turnover + (troph_turnover | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m8 <- brm(
-      comm_n_stability ~ s_rich_mean + (s_rich_mean | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-### model of interest, given across-ecosystem importance
-# saveRDS(m8, file = 'local_data/rds-single-richness.rds')
-
-m9 <- brm(
-      comm_n_stability ~ s_div_mean + (s_div_mean | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m10 <- brm(
-      comm_n_stability ~ t_div_mean + (t_div_mean | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-model_table_all <- performance::compare_performance(m1,m4,m5,m6,m7,m8,m9,m10)
-
-model_selection1 <- model_table_all |>
-      mutate(dWAIC = WAIC - min(WAIC))
-
-# write_csv(model_selection1, "output/tables/brms-fullmodel-selection-table-roundone.csv")
-
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm4', 'model_selection1')
-rm(list = setdiff(ls(), keep))
-
-##################################################################################################
-### round two ------------------------------------------------------------------------------------
-##################################################################################################
-### round two: add spp_synchrony (best round one model) to all other predictors
-m41 <- brm(
-      comm_n_stability ~ t_rich_mean + spp_synchrony + (t_rich_mean + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m45 <- brm(
-      comm_n_stability ~ spp_turnover + spp_synchrony + (spp_turnover + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m47 <- brm(
-      comm_n_stability ~ troph_turnover + spp_synchrony + (troph_turnover + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m48 <- brm(
-      comm_n_stability ~ s_rich_mean + spp_synchrony + (s_rich_mean + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m49 <- brm(
-      comm_n_stability ~ t_div_mean + spp_synchrony + (t_div_mean + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m40 <- brm(
-      comm_n_stability ~ s_div_mean + spp_synchrony + (s_div_mean + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-model_table_all <- performance::compare_performance(m41,m4,m45,m47,m48,m49,m40)
-
-model_selection2 <- model_table_all |>
-      mutate(dWAIC = WAIC - min(WAIC))
-write_csv(model_selection2, "output/tables/brms-fullmodel-selection-table-roundtwo.csv")
-
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm45', 'model_selection1', 'model_selection2')
-rm(list = setdiff(ls(), keep))
-
-##################################################################################################
-### round three ----------------------------------------------------------------------------------
-##################################################################################################
-### round three: add spp_turnover (best round two model) to spp_synchrony + one additional predictor
-
-m451 <- brm(
-      comm_n_stability ~ t_rich_mean + spp_turnover + spp_synchrony + (t_rich_mean + spp_turnover + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m457 <- brm(
-      comm_n_stability ~ troph_turnover + spp_turnover + spp_synchrony + (troph_turnover + spp_turnover + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m458 <- brm(
-      comm_n_stability ~ s_rich_mean + spp_turnover + spp_synchrony + (s_rich_mean + spp_turnover + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m459 <- brm(
-      comm_n_stability ~ t_div_mean + spp_turnover + spp_synchrony + (t_div_mean + spp_turnover + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-m450 <- brm(
-      comm_n_stability ~ s_div_mean + spp_turnover + spp_synchrony + (s_div_mean + spp_turnover + spp_synchrony | program),
-      data = dat_ready,
-      prior = pr,
-      warmup = 1000,
-      iter = 10000,
-      chains = 4,
-      seed = 20
-)
-
-model_table_all <- performance::compare_performance(m45,m451,m457,m458,m459,m450)
-
-model_selection3 <- model_table_all |>
-      mutate(dWAIC = WAIC - min(WAIC))
-write_csv(model_selection3, "output/tables/brms-fullmodel-selection-table-roundthree.csv")
-
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm45', 'model_selection1', 'model_selection2', 'model_selection3')
-rm(list = setdiff(ls(), keep))
-full_model <- m45
-
-saveRDS(full_model, file = 'local_data/rds-full-model.rds')
+# keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit")
+# rm(list = setdiff(ls(), keep))
+# 
+# glimpse(model_data_all)
+# dat_scaled <- model_data_all |> 
+#       rename(program = project) |> 
+#       select(program, site, comm_n_stability, everything()) |> 
+#       
+#       # comm_n_stability scaled globally (outcome); predictors scaled within-program
+#       mutate(comm_n_stability = as.numeric(scale(comm_n_stability))) |>
+#       
+#       # scaling predictors within program to control for between-program differences (i.e., across vs. within)
+#       # in baseline community metrics; coefficients reflect within-program
+#       # standardized effects
+#       group_by(program) |> 
+#       mutate(across(comm_n_mean:troph_synchrony, \(x) as.numeric(scale(x, center = TRUE)))) |> 
+#       ungroup()
+# glimpse(dat_scaled)      
+# dat_ready <- dat_scaled      
+# glimpse(dat_ready)
+# 
+# # checking skewness and kurtosis of predictor metric in brms model
+# # thresholds: |skewness| <= 2 and kurtosis <= 7 indicate acceptable normality (Kline 2016; West, Finch & Curran 1995)
+# dat_ready |>
+#       select(comm_n_stability) |>
+#       summarise(across(everything(), list(
+#             skew = skewness,
+#             kurt = kurtosis
+#       ))) |>
+#       pivot_longer(
+#             everything(),
+#             names_to  = c("variable", "metric"),
+#             names_sep = "_(?=[^_]+$)",  # splits on last underscore
+#             values_to = "value"
+#       ) |>
+#       pivot_wider(
+#             names_from  = metric,
+#             values_from = value
+#       )
+# 
+# # normal(0,1) weakly informative prior appropriate for standardized predictors - following Lemoine (2019, Ecology)
+# pr = prior(normal(0, 1), class = 'b')
+# 
+# ##################################################################################################
+# ##################################################################################################
+# ##################################################################################################
+# ### Full Models ----------------------------------------------------------------------------------
+# ##################################################################################################
+# ##################################################################################################
+# ##################################################################################################
+# 
+# test_corr <- dat_ready |> select(s_rich_mean, s_div_mean,
+#                                  t_rich_mean, t_div_mean,
+#                                  spp_turnover, spp_synchrony,
+#                                  troph_turnover, troph_synchrony)
+# 
+# matrix <- cor(test_corr, use = 'complete.obs')
+# 
+# corrplot(matrix, method = "number", type = "lower", tl.col = "black", tl.srt = 45)
+# glimpse(dat_ready)
+# 
+# ##################################################################################################
+# ### round one ------------------------------------------------------------------------------------
+# ##################################################################################################
+# 
+# ### round one: single-term models to identify best individual predictor
+# m1 <- brm(
+#       comm_n_stability ~ t_rich_mean + (t_rich_mean | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m4 <- brm(
+#       comm_n_stability ~ spp_synchrony + (spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# ### best fit single term model
+# # saveRDS(m4, file = 'local_data/rds-single-synchrony.rds')
+# 
+# m5 <- brm(
+#       comm_n_stability ~ spp_turnover + (spp_turnover | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m6 <- brm(
+#       comm_n_stability ~ troph_synchrony + (troph_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m7 <- brm(
+#       comm_n_stability ~ troph_turnover + (troph_turnover | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m8 <- brm(
+#       comm_n_stability ~ s_rich_mean + (s_rich_mean | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# ### model of interest, given across-ecosystem importance
+# # saveRDS(m8, file = 'local_data/rds-single-richness.rds')
+# 
+# m9 <- brm(
+#       comm_n_stability ~ s_div_mean + (s_div_mean | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m10 <- brm(
+#       comm_n_stability ~ t_div_mean + (t_div_mean | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# model_table_all <- performance::compare_performance(m1,m4,m5,m6,m7,m8,m9,m10)
+# 
+# model_selection1 <- model_table_all |>
+#       mutate(dWAIC = WAIC - min(WAIC))
+# 
+# # write_csv(model_selection1, "output/tables/brms-fullmodel-selection-table-roundone.csv")
+# 
+# keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm4', 'model_selection1')
+# rm(list = setdiff(ls(), keep))
+# 
+# ##################################################################################################
+# ### round two ------------------------------------------------------------------------------------
+# ##################################################################################################
+# ### round two: add spp_synchrony (best round one model) to all other predictors
+# m41 <- brm(
+#       comm_n_stability ~ t_rich_mean + spp_synchrony + (t_rich_mean + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m45 <- brm(
+#       comm_n_stability ~ spp_turnover + spp_synchrony + (spp_turnover + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m47 <- brm(
+#       comm_n_stability ~ troph_turnover + spp_synchrony + (troph_turnover + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m48 <- brm(
+#       comm_n_stability ~ s_rich_mean + spp_synchrony + (s_rich_mean + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m49 <- brm(
+#       comm_n_stability ~ t_div_mean + spp_synchrony + (t_div_mean + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m40 <- brm(
+#       comm_n_stability ~ s_div_mean + spp_synchrony + (s_div_mean + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# model_table_all <- performance::compare_performance(m41,m4,m45,m47,m48,m49,m40)
+# 
+# model_selection2 <- model_table_all |>
+#       mutate(dWAIC = WAIC - min(WAIC))
+# write_csv(model_selection2, "output/tables/brms-fullmodel-selection-table-roundtwo.csv")
+# 
+# keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm45', 'model_selection1', 'model_selection2')
+# rm(list = setdiff(ls(), keep))
+# 
+# ##################################################################################################
+# ### round three ----------------------------------------------------------------------------------
+# ##################################################################################################
+# ### round three: add spp_turnover (best round two model) to spp_synchrony + one additional predictor
+# 
+# m451 <- brm(
+#       comm_n_stability ~ t_rich_mean + spp_turnover + spp_synchrony + (t_rich_mean + spp_turnover + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m457 <- brm(
+#       comm_n_stability ~ troph_turnover + spp_turnover + spp_synchrony + (troph_turnover + spp_turnover + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m458 <- brm(
+#       comm_n_stability ~ s_rich_mean + spp_turnover + spp_synchrony + (s_rich_mean + spp_turnover + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m459 <- brm(
+#       comm_n_stability ~ t_div_mean + spp_turnover + spp_synchrony + (t_div_mean + spp_turnover + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# m450 <- brm(
+#       comm_n_stability ~ s_div_mean + spp_turnover + spp_synchrony + (s_div_mean + spp_turnover + spp_synchrony | program),
+#       data = dat_ready,
+#       prior = pr,
+#       warmup = 1000,
+#       iter = 10000,
+#       chains = 4,
+#       seed = 20
+# )
+# 
+# model_table_all <- performance::compare_performance(m45,m451,m457,m458,m459,m450)
+# 
+# model_selection3 <- model_table_all |>
+#       mutate(dWAIC = WAIC - min(WAIC))
+# write_csv(model_selection3, "output/tables/brms-fullmodel-selection-table-roundthree.csv")
+# 
+# keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm45', 'model_selection1', 'model_selection2', 'model_selection3')
+# rm(list = setdiff(ls(), keep))
+# full_model <- m45
+# 
+# saveRDS(full_model, file = 'local_data/rds-full-model.rds')
 
 ##################################################################################################
 ##################################################################################################
@@ -1808,3 +1809,126 @@ ann_dt |>
 
 ggsave("output/map_insets/pccs-timeseries.png", units = "in", width = 5,
        height = 5, dpi =  600)
+
+# summary stats -----------------------------------------------------------
+
+# supplemental analyses ---------------------------------------------------
+glimpse(model_data_all)
+sync_turn_cors <- model_data_all |> 
+      group_by(project) |> 
+      summarise(
+            r = cor(spp_synchrony, spp_turnover, method = "pearson"),
+            p = cor.test(spp_synchrony, spp_turnover)$p.value,
+            n = n()
+      ) |> 
+      arrange(r)
+print(sync_turn_cors)
+
+project_order <- sync_turn_cors |> 
+      arrange(r) |> 
+      pull(project)
+
+model_data_all |> 
+      mutate(project = factor(project, levels = project_order)) |> 
+      ggplot(aes(x = spp_synchrony, y = spp_turnover, color = project)) +
+      geom_point(alpha = 0.7) +
+      geom_smooth(method = "lm", se = TRUE) +
+      facet_wrap(~ project, scales = "free") +
+      theme_bw() +
+      labs(
+            x = "Species Synchrony",
+            y = "Species Turnover",
+            title = "Within-site covariance: Synchrony vs. Turnover"
+      ) +
+      theme(legend.position = "none")
+
+##################################################################################################
+### Stability ~ Magnitude ------------------------------------------------------------------------
+##################################################################################################
+
+summ <- dat |>
+      group_by(program) |> 
+      mutate(stability = mean(comm_n_stability),
+             magnitude  = mean(comm_n_mean))
+
+summ_model <- lm(log1p(stability) ~ log1p(magnitude), data = summ)
+summary(summ_model)$r.squared 
+summary(summ_model)
+r2_summ <- summary(summ_model)$r.squared
+r2_summ
+
+dat |>
+      ggplot(aes(x = log1p(comm_n_mean), y = log1p(comm_n_stability))) +
+      geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
+      geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
+      geom_point(aes(x = log1p(magnitude), y = log1p(stability), color = program), size = 5, dat = summ) +
+      labs(x = "log(CND Supply + 1)",
+           y = "log(CND Stability + 1)",
+           color = 'Program') +
+      scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 14),
+            axis.text.y = element_text(face = "bold", color = "black", size = 14),
+            axis.title.x = element_text(face = "bold", color = "black", size = 16),
+            axis.title.y = element_text(face = "bold", color = "black", size = 16),
+            legend.position = c(0.20, 0.65),
+            legend.justification = c(1, 0),
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"))
+
+##################################################################################################
+### Magnitude ~ Richness -------------------------------------------------------------------------
+##################################################################################################
+
+summ <- dat |>
+      group_by(program) |> 
+      mutate(richness = mean(s_rich_mean),
+             magnitude  = mean(comm_n_mean))
+
+summ_model <- lm(log1p(magnitude) ~ log1p(richness), data = summ)
+summary(summ_model)$r.squared 
+summary(summ_model)
+r2_summ <- summary(summ_model)$r.squared
+r2_summ
+
+dat |>
+      ggplot(aes(x = log1p(s_rich_mean), y = log1p(comm_n_mean))) +
+      geom_smooth(aes(color = program), method = "lm", se = FALSE) + 
+      geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
+      # geom_point(aes(x = log1p(richness), y = log1p(magnitude), color = program), size = 5, dat = summ) +
+      labs(x = "log(Species Richness + 1)",
+           y = "log(CND Supply + 1)",
+           color = 'Program') +
+      # scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 14),
+            axis.text.y = element_text(face = "bold", color = "black", size = 14),
+            axis.title.x = element_text(face = "bold", color = "black", size = 16),
+            axis.title.y = element_text(face = "bold", color = "black", size = 16),
+            legend.position = c(0.20, 0.65),
+            legend.justification = c(1, 0),
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"))
+
+dat |>
+      ggplot(aes(x = log1p(s_rich_mean), 
+                 y = log1p(comm_n_mean),
+                 color = program)) +
+      geom_smooth(method = "lm", se = FALSE) +
+      geom_point(alpha = 0.30) +
+      facet_wrap(~program, scales = "free") +
+      scale_color_manual(values = program_palette) +
+      theme_classic()
+library(lme4)
+lmm_slopes <- lmer(
+      log1p(comm_n_mean) ~ log1p(s_rich_mean) + 
+            (log1p(s_rich_mean) | program), 
+      data = dat
+)
+summary(lmm_slopes)
+
+# extract R2 - marginal (fixed effects only) and conditional (full model)
+library(MuMIn)
+r.squaredGLMM(lmm_slopes)
