@@ -10,7 +10,8 @@
 # install.packages("librarian")
 librarian::shelf(tidyverse, vegan, readxl, splitstackshape, codyn, lavaan,
                  MuMIn, corrplot, performance, ggeffects, ggpubr, parameters, ggstats,
-                 brms, mixedup, rstatix, sf, ggspatial, waldo, multcompView, tidySEM)
+                 brms, mixedup, rstatix, sf, ggspatial, waldo, multcompView, tidySEM,
+                 lme4)
 
 ### set custom functions
 nacheck <- function(df) {
@@ -1921,7 +1922,7 @@ dat |>
       facet_wrap(~program, scales = "free") +
       scale_color_manual(values = program_palette) +
       theme_classic()
-library(lme4)
+
 lmm_slopes <- lmer(
       log1p(comm_n_mean) ~ log1p(s_rich_mean) + 
             (log1p(s_rich_mean) | program), 
@@ -1930,5 +1931,4 @@ lmm_slopes <- lmer(
 summary(lmm_slopes)
 
 # extract R2 - marginal (fixed effects only) and conditional (full model)
-library(MuMIn)
 r.squaredGLMM(lmm_slopes)
