@@ -127,11 +127,11 @@ dt1 <- dt_ab |>
       select(-mean_dmperind, -sd_dmperind, -lower_bound, -upper_bound, -outlier, -sharkray, -elasmo) |> 
       
       # coalesce density columns and remove unnecessary '..m3' column
-      mutate(density = coalesce(density_num_m, density_num_m2)) |> 
+      mutate(density_num = coalesce(density_num_m, density_num_m2)) |> 
       select(-density_num_m, -density_num_m2, -density_num_m3) |> 
       
-      # remove high density of large-bodied fish observations that skew entire time series [lost < 0.01% of data]
-      filter(!(density > 1 & nind_ug_hr > 20000))
+      # remove high density of large-bodied fish observations that skew entire time series [lost < 0.0001% of data]
+      filter(!(density_num > 1 & nind_ug_hr > 20000))
 glimpse(dt1)
 nacheck(dt1)
 head(dt1)
@@ -168,9 +168,9 @@ dt2_mcr <- dt1 |>
                site, subsite_level1, subsite_level2, subsite_level3, 
                scientific_name) |> 
       summarize(
-            n       = sum(nind_ug_hr*density, na.rm = TRUE),
-            bm      = sum(dmperind_g_ind*density, na.rm = TRUE),
-            dens    = sum(density, na.rm = TRUE),
+            n       = sum(nind_ug_hr*density_num, na.rm = TRUE),
+            bm      = sum(dmperind_g_ind*density_num, na.rm = TRUE),
+            dens    = sum(density_num, na.rm = TRUE),
             .groups = 'drop'
       ) |> 
       group_by(project, habitat, year, month, 
@@ -201,9 +201,9 @@ dt2_other <- dt1 |>
       ### sum across unique taxa at the transect level
       ### coalesces multiple species observation to single n and bm value for each transect
       summarize(
-            species_n    = sum(nind_ug_hr*density, na.rm = TRUE),
-            species_bm   = sum(dmperind_g_ind*density, na.rm = TRUE),
-            species_dens = sum(density, na.rm = TRUE),
+            species_n    = sum(nind_ug_hr*density_num, na.rm = TRUE),
+            species_bm   = sum(dmperind_g_ind*density_num, na.rm = TRUE),
+            species_dens = sum(density_num, na.rm = TRUE),
             .groups = 'drop'
       ) |> 
       select(project, habitat, year, month, site, subsite_level1, subsite_level2, subsite_level3,
@@ -324,9 +324,9 @@ dt2_mcr_troph <- dt1 |>
                site, subsite_level1, subsite_level2, subsite_level3, 
                diet_cat) |> 
       summarize(
-            n       = sum(nind_ug_hr*density, na.rm = TRUE),
-            bm      = sum(dmperind_g_ind*density, na.rm = TRUE),
-            dens    = sum(density, na.rm = TRUE),
+            n       = sum(nind_ug_hr*density_num, na.rm = TRUE),
+            bm      = sum(dmperind_g_ind*density_num, na.rm = TRUE),
+            dens    = sum(density_num, na.rm = TRUE),
             .groups = 'drop'
       ) |> 
       group_by(project, habitat, year, month, 
@@ -357,9 +357,9 @@ dt2_other_troph <- dt1 |>
       ### sum across unique taxa at the transect level
       ### coalesces multiple troph observation to single n and bm value for each transect
       summarize(
-            troph_n    = sum(nind_ug_hr*density, na.rm = TRUE),
-            troph_bm   = sum(dmperind_g_ind*density, na.rm = TRUE),
-            troph_dens = sum(density, na.rm = TRUE),
+            troph_n    = sum(nind_ug_hr*density_num, na.rm = TRUE),
+            troph_bm   = sum(dmperind_g_ind*density_num, na.rm = TRUE),
+            troph_dens = sum(density_num, na.rm = TRUE),
             .groups = 'drop'
       ) |> 
       select(project, habitat, year, month, site, subsite_level1, subsite_level2, subsite_level3,
