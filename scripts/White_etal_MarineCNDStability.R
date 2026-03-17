@@ -6,20 +6,20 @@
 # L759-1059 commented out - undo to run within-ecosystem models
 
 # Housekeeping ------------------------------------------------------------
-### load necessary libraries
+### load necessary libraries ----
 # install.packages("librarian")
 librarian::shelf(tidyverse, vegan, readxl, splitstackshape, codyn, lavaan,
                  MuMIn, corrplot, performance, ggeffects, ggpubr, parameters, ggstats,
                  brms, mixedup, rstatix, sf, ggspatial, waldo, multcompView, tidySEM,
-                 lme4)
+                 lme4, glmmTMB)
 
-### set custom functions
+### set custom functions ----
 nacheck <- function(df) {
       na_count_per_column <- sapply(df, function(x) sum(is.na(x)))
       print(na_count_per_column)
 }
 
-# Load and prepare data ----------------------------------------------------
+# Load and clean data ----------------------------------------------------
 dt <- read.csv(file.path("tier2", "harmonized_consumer_excretion_CLEAN.csv"),
                stringsAsFactors = F,
                ### all NAs were inititally transformed to '.'
@@ -138,28 +138,9 @@ nacheck(dt1)
 head(dt1)
 rm(dt, dta, dtb1, dtb2, dtb, dt_ab)
 
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
+
 # Summarize data ---------------------------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-
-##################################################################################################
-##################################################################################################
-##################################################################################################
-### Calculating CND, Biomass and Species Diversity metrics ---------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
-
+## Calculating CND and Biomass metrics -----------------------------------------------------------
 ### MCR subsite_level3 has two levels (1 and 5) that should be summed across, 
 ### as they are conducted within same space and time so split them out and go
 ### sum across subsite_level2 
@@ -311,14 +292,8 @@ glimpse(dt3_sp)
 head(dt3_sp)
 nacheck(dt3_sp)
 
-##################################################################################################
-##################################################################################################
-##################################################################################################
-### Calculating Trophic Diversity metrics --------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
 
+## Calculating Trophic Richness and Diversity  --------------------------------------
 dt2_mcr_troph <- dt1 |> 
       filter(project == 'MCR') |> 
       group_by(project, habitat, year, month, 
@@ -377,11 +352,6 @@ head(dt2_troph)
 nacheck(dt2_troph)
 rm(dt2_mcr_troph, dt2_other_troph)
 
-## Calculating Trophic Richness ----
-head(dt2_troph)
-glimpse(dt2_troph)
-nacheck(dt2_troph)
-
 dt3_troph <- dt2_troph |> 
       group_by(project, habitat, year, month, 
                site, subsite_level1, subsite_level2, subsite_level3) |> 
@@ -426,7 +396,7 @@ glimpse(dt3_troph)
 head(dt3_troph)
 nacheck(dt3_troph)
 
-### bring it all together ----
+## Join trophic and species level data together ---------------------------------------
 dt3 <- dt3_cnd |> 
       left_join(dt3_sp) |> 
       left_join(dt3_troph)
@@ -454,13 +424,8 @@ head(cnd_model_data)
 nacheck(cnd_model_data)
 # write_csv(cnd_model_data, "local_data/community-level-nutrient-stability.csv")
 
-##################################################################################################
-##################################################################################################
-##################################################################################################
-### Calculating Species Dynamics -----------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
+
+## Calculate Species Dynamics -----------------------------------------------------------------
 glimpse(dt2)
 head(dt2)
 nacheck(dt2)
@@ -521,13 +486,8 @@ spp_dyn_model_data <- dt3_sp_dyn |>
       ungroup() |> 
       select(project, site, spp_turnover, spp_synchrony)
 
-##################################################################################################
-##################################################################################################
-##################################################################################################
-### Calculating Trophic Dynamics -----------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
+
+## Calculate Trophic Dynamics -----------------------------------------------------------------
 glimpse(dt2_troph)
 head(dt2_troph)
 nacheck(dt2_troph)
@@ -588,11 +548,12 @@ troph_dyn_model_data <- dt3_troph_dyn |>
       ungroup() |> 
       select(project, site, troph_turnover, troph_synchrony)
 
-### join everything together ----
+## Join trophic and species level dynamics together -----------------------------------------------
 glimpse(cnd_model_data)
 glimpse(spp_dyn_model_data)
 glimpse(troph_dyn_model_data)
 
+## Join all data to create final model dataset ----------------------------------------------------
 model_data_all <- cnd_model_data |> 
       left_join(spp_dyn_model_data) |> 
       left_join(troph_dyn_model_data)
@@ -601,20 +562,8 @@ head(model_data_all)
 nacheck(model_data_all)
 # write_csv(model_data_all, "local_data/model-data-all.csv")
 
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-# Run across system model ------------------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
 
+# Run across system model ------------------------------------------------------------------------
 keep <- c("nacheck", "model_data_all", "cnd_ts_data")
 rm(list = setdiff(ls(), keep))
 
@@ -632,9 +581,8 @@ glimpse(dat_scaled)
 dat_ready <- dat_scaled      
 glimpse(dat_ready)
 
-# checking skewness and kurtosis of predictor metrics nested in path model
-# thresholds: |skewness| <= 2 and kurtosis <= 7 indicate acceptable normality (Kline 2016; West, Finch & Curran 1995)
-# values exceeding threshold justify use of MLR estimation
+## Check skewness and kurtosis of predictor metrics nested in path model -------------------------
+# (Kline 2016; West, Finch & Curran 1995)
 dat_ready |>
       select(comm_n_stability, spp_synchrony, 
              spp_turnover, troph_turnover) |>
@@ -653,7 +601,7 @@ dat_ready |>
             values_from = value
       )
 
-# review correlation structure
+## Review correlation structure ------------------------------------------------------------------
 num_vars <- dat_ready |> 
       dplyr::select(
             comm_n_stability,
@@ -669,13 +617,14 @@ corrplot(m,
          tl.col = "black",       
          diag = FALSE)
 
+## Specify model paths -------------------------------------------------------------------
 path_model <- '
    # Regressions
    comm_n_stability ~ cp*s_rich_mean + b1*spp_synchrony + b2*spp_turnover + b3*troph_turnover
    
    spp_synchrony    ~ a1*s_rich_mean
    
-   spp_turnover     ~ a2*t_rich_mean + a3*s_rich_mean
+   spp_turnover     ~ a3*s_rich_mean + a2*t_rich_mean
    
    troph_turnover   ~ a4*t_rich_mean
 
@@ -691,7 +640,7 @@ path_model <- '
    
    ### indirect effect of species richness through species turnover
    ind_srich_sturn := a3 * b2
-   
+   ind_trich_sturn := a2 * b2
    ### indirect effect of trophic richness through trophic turnover
    ind_trich_tturn := a4 * b3
    
@@ -699,6 +648,7 @@ path_model <- '
    total_srich_effect := cp + ind_srich_ssync + ind_srich_sturn
 '
 
+## Examine model fit, summarize, and visualize -------------------------------------------------------
 # MLR (Maximum Likelihood with Robust standard errors) estimator used for robustness to non-normality in scaled continuous outcomes
 fit <- sem(path_model, data = dat_ready, estimator = "MLR")
 summary(fit, standardized = TRUE, fit.measures = TRUE)
@@ -744,20 +694,10 @@ p <- plot(graph) +
       )
 p
 
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-# Run within system model ------------------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
-##################################################################################################
 
+# Run within system model ------------------------------------------------------------------------
+#
+#
 # keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit")
 # rm(list = setdiff(ls(), keep))
 # 
@@ -779,8 +719,7 @@ p
 # dat_ready <- dat_scaled      
 # glimpse(dat_ready)
 # 
-# # checking skewness and kurtosis of predictor metric in brms model
-# # thresholds: |skewness| <= 2 and kurtosis <= 7 indicate acceptable normality (Kline 2016; West, Finch & Curran 1995)
+## Check skewness and kurtosis of predictor metric in brms model (Kline 2016; West, Finch & Curran 1995) ----
 # dat_ready |>
 #       select(comm_n_stability) |>
 #       summarise(across(everything(), list(
@@ -801,14 +740,8 @@ p
 # # normal(0,1) weakly informative prior appropriate for standardized predictors - following Lemoine (2019, Ecology)
 # pr = prior(normal(0, 1), class = 'b')
 # 
-# ##################################################################################################
-# ##################################################################################################
-# ##################################################################################################
-# ### Full Models ----------------------------------------------------------------------------------
-# ##################################################################################################
-# ##################################################################################################
-# ##################################################################################################
-# 
+#
+## Review correlation structure --------------------------------------------------------------------
 # test_corr <- dat_ready |> select(s_rich_mean, s_div_mean,
 #                                  t_rich_mean, t_div_mean,
 #                                  spp_turnover, spp_synchrony,
@@ -819,9 +752,9 @@ p
 # corrplot(matrix, method = "number", type = "lower", tl.col = "black", tl.srt = 45)
 # glimpse(dat_ready)
 # 
-# ##################################################################################################
-# ### round one ------------------------------------------------------------------------------------
-# ##################################################################################################
+## Fit models using forward selection --------------------------------------------------------------
+### round one ------------------------------------------------------------------------------------
+#
 # 
 # ### round one: single-term models to identify best individual predictor
 # m1 <- brm(
@@ -920,9 +853,9 @@ p
 # keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm4', 'model_selection1')
 # rm(list = setdiff(ls(), keep))
 # 
-# ##################################################################################################
-# ### round two ------------------------------------------------------------------------------------
-# ##################################################################################################
+#
+### round two ------------------------------------------------------------------------------------
+#
 # ### round two: add spp_synchrony (best round one model) to all other predictors
 # m41 <- brm(
 #       comm_n_stability ~ t_rich_mean + spp_synchrony + (t_rich_mean + spp_synchrony | program),
@@ -993,9 +926,10 @@ p
 # keep <- c("nacheck", "model_data_all", "cnd_ts_data", "fit", "dat_ready", "pr", 'm45', 'model_selection1', 'model_selection2')
 # rm(list = setdiff(ls(), keep))
 # 
-# ##################################################################################################
-# ### round three ----------------------------------------------------------------------------------
-# ##################################################################################################
+#
+### round three ----------------------------------------------------------------------------------
+#
+#
 # ### round three: add spp_turnover (best round two model) to spp_synchrony + one additional predictor
 # 
 # m451 <- brm(
@@ -1060,22 +994,18 @@ p
 # 
 # saveRDS(full_model, file = 'local_data/rds-full-model.rds')
 
-##################################################################################################
-##################################################################################################
-### Visualize Models -----------------------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
 
-##################################################################################################
-### Single Term Models ---------------------------------------------------------------------------
-##################################################################################################
+## Examine model fit, summarize, and visualize --------------------------------------------------
+### single term models --------------------------------------------------------------------------
 
+#### read in necessary models ----
 synch = readRDS("local_data/rds-single-synchrony.rds")
 rich = readRDS("local_data/rds-single-richness.rds")
 glimpse(dat_ready)
+performance(synch)
+performance(rich)
 
-# stats ----
+#### summary stats ----
 p_synch = as_draws_df(synch)
 glimpse(p_synch)
 mean(p_synch$`r_program[PCCC,spp_synchrony]` + p_synch$b_spp_synchrony  < 0)
@@ -1323,14 +1253,13 @@ ggarrange(syn, sr, align = 'v', nrow =2)
 
 ggsave('output/fig3.png', dpi = 600, units= 'in', height = 6, width = 6)
 
-##################################################################################################
-### Full Model -----------------------------------------------------------------------------------
-##################################################################################################
 
-### read in necessary data ----
+### forward selected model -----------------------------------------------------
+#### read in necessary models --------------------------------------------------
 full_model = readRDS('local_data/rds-full-model.rds')
+performance(full_model)
 
-#summary stats -----
+#### summary stats -----
 post = as_draws_df(full_model)
 mean(post$`r_program[MCR,spp_synchrony]`+ post$b_spp_synchrony < 0)
 mean(post$`r_program[MCR,spp_turnover]` + post$b_spp_turnover < 0)
@@ -1466,143 +1395,10 @@ plot
 
 ggsave('output/fig4.png', plot = plot, dpi = 600, units= 'in', height = 5, width = 5)
 
-##################################################################################################
-##################################################################################################
-##################################################################################################
-### Supplemental Materials -----------------------------------------------------------------------
-##################################################################################################
-##################################################################################################
-##################################################################################################
 
-##################################################################################################
-### Boxplot --------------------------------------------------------------------------------------
-##################################################################################################
+# Additional Analyses and Summary ----------------------------------------------
+## Figure One Map --------------------------------------------------------------
 keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette")
-rm(list = setdiff(ls(), keep))
-dat <- model_data_all |> rename(program = project)
-summ_test <- dat |>  
-      group_by(program) |> 
-      summarize(
-            mean = mean(comm_n_stability, na.rm = TRUE),
-            median = median(comm_n_stability, na.rm = TRUE)
-      )
-
-# test for homogeneity of variance across programs
-# significant result justifies Welch's ANOVA and Games-Howell post-hoc
-car::leveneTest(comm_n_stability ~ factor(program), data = dat)
-oneway.test(comm_n_stability ~ program, data = dat)
-
-# Games-Howell post-hoc — appropriate for unequal variances and sample sizes
-posthoc <- games_howell_test(dat, comm_n_stability ~ program)
-pw <- posthoc |>
-      transmute(group1, group2, p.adj)
-pvec <- pw |>
-      mutate(comparison = paste(group1, group2, sep = "-")) |>
-      select(comparison, p.adj) |>
-      deframe()
-cld <- multcompLetters(pvec, threshold = 0.05)
-
-letters_df <- tibble(
-      program = names(cld$Letters),
-      letters = cld$Letters) |>
-      mutate(program = factor(program, levels = c("MCR","PCCS","FCE","PCCC","SBC","VCR"))) |>
-      arrange(program) |> 
-      # remap CLD letters to alphabetical order for readability
-      # WARNING: if data changes, verify cld$Letters output before updating chartr mapping
-      mutate(
-            letters = chartr(
-                  old = "cabd",
-                  new = "abcd",
-                  letters
-            )
-      )
-letters_df
-
-letters <- letters_df |> 
-      left_join(dat) |> 
-      select(program, letters, comm_n_stability) |> 
-      group_by(program, letters) |> 
-      summarize(max = max(comm_n_stability, na.rm = TRUE),
-                .groups = 'drop') |> 
-      group_by(letters) |> 
-      mutate(pos = max(max))
-
-dat |> 
-      mutate(program = factor(
-            program,
-            levels = c("MCR", "PCCS", "FCE", "PCCC", "SBC", "VCR")
-      )) |>
-      ggplot(aes(x=program, y=comm_n_stability, fill = program)) +
-      geom_jitter(aes(color = program), shape = 16, size = 2, width = 0.2, alpha = 1.0)+
-      geom_boxplot(outlier.shape = NA, alpha = 0.35) +
-      scale_fill_manual(values = program_palette) + 
-      scale_color_manual(values = program_palette) +
-      labs(y = "CND Stability", 
-           fill = "Program",
-           x = NULL) +
-      theme_classic() +
-      geom_text(
-            data = letters, 
-            aes(x = program, y = pos + 0.2, label = letters), 
-            inherit.aes = FALSE, 
-            vjust = 0,
-            fontface = "bold",
-            size = 3.5,            
-            color = "black"      
-      ) +
-      theme(axis.text.x = element_text(face = "bold", color = "black"),
-            axis.text.y = element_text(face = "bold", color = "black"),
-            axis.title.x = element_text(face = "bold", color = "black"),
-            axis.title.y = element_text(face = "bold", color = "black"),
-            legend.position = "none",
-            legend.text = element_text(face = "bold", color = "black"),
-            legend.title = element_text(face = "bold", color = "black"),
-            strip.text = element_text(face = "bold", color = "black"))
-
-ggsave("output/figure-one.png", units = "in", width = 4,
-       height = 4, dpi =  600)
-
-##################################################################################################
-### Simple Regression ----------------------------------------------------------------------------
-##################################################################################################
-
-summ <- dat |>
-      group_by(program) |> 
-      mutate(stability = mean(comm_n_stability),
-             richness  = mean(s_rich_mean))
-
-summ_model <- lm(log1p(stability) ~ log1p(richness), data = summ)
-summary(summ_model)$r.squared 
-summary(summ_model)
-r2_summ <- summary(summ_model)$r.squared
-r2_summ
-
-dat |>
-      ggplot(aes(x = log1p(s_rich_mean), y = log1p(comm_n_stability))) +
-      geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
-      geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
-      geom_point(aes(x = log1p(richness), y = log1p(stability), color = program), size = 5, dat = summ) +
-      labs(x = "log(Species Richness + 1)",
-           y = "log(CND Stability + 1)",
-           color = 'Program') +
-      scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
-      theme_classic() +
-      scale_color_manual(values = program_palette) +
-      theme(axis.text.x = element_text(face = "bold", color = "black", size = 14),
-            axis.text.y = element_text(face = "bold", color = "black", size = 14),
-            axis.title.x = element_text(face = "bold", color = "black", size = 16),
-            axis.title.y = element_text(face = "bold", color = "black", size = 16),
-            legend.position = c(0.95, 0.05),
-            legend.justification = c(1, 0),
-            legend.text = element_text(face = "bold", color = "black"),
-            legend.title = element_text(face = "bold", color = "black"))
-
-ggsave("output/fig2-panelb.png", units = "in", width = 4.2,
-       height = 4.2, dpi =  600)
-
-##################################################################################################
-### Map   ----------------------------------------------------------------------------------------
-##################################################################################################
 
 world <- st_read('../../qgis/continent/world-continents.shp')
 glimpse(world)
@@ -1659,10 +1455,6 @@ all
 
 ggsave("output/sitemap.png", units = "in", width = 5,
        height = 5, dpi =  600)
-
-##################################################################################################
-### Map Time Series ------------------------------------------------------------------------------
-##################################################################################################
 
 ann_dt <- cnd_ts_data |> rename(program = project)
 glimpse(ann_dt)
@@ -1811,59 +1603,114 @@ ann_dt |>
 ggsave("output/map_insets/pccs-timeseries.png", units = "in", width = 5,
        height = 5, dpi =  600)
 
-# summary stats -----------------------------------------------------------
 
-# supplemental analyses ---------------------------------------------------
-glimpse(model_data_all)
-sync_turn_cors <- model_data_all |> 
-      group_by(project) |> 
-      summarise(
-            r = cor(spp_synchrony, spp_turnover, method = "pearson"),
-            p = cor.test(spp_synchrony, spp_turnover)$p.value,
-            n = n()
-      ) |> 
-      arrange(r)
-print(sync_turn_cors)
+## Figure Two Boxplot and ANOVA -----------------------------------------------------------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette")
+rm(list = setdiff(ls(), keep))
+dat <- model_data_all |> rename(program = project)
+summ_test <- dat |>  
+      group_by(program) |> 
+      summarize(
+            mean = mean(comm_n_stability, na.rm = TRUE),
+            sd = sd(comm_n_stability, na.rm = TRUE),
+            median = median(comm_n_stability, na.rm = TRUE),
+            .groups = 'drop'
+      )
 
-project_order <- sync_turn_cors |> 
-      arrange(r) |> 
-      pull(project)
+# test for homogeneity of variance across programs
+# significant result justifies Welch's ANOVA and Games-Howell post-hoc
+car::leveneTest(comm_n_stability ~ factor(program), data = dat)
+oneway.test(comm_n_stability ~ program, data = dat)
 
-model_data_all |> 
-      mutate(project = factor(project, levels = project_order)) |> 
-      ggplot(aes(x = spp_synchrony, y = spp_turnover, color = project)) +
-      geom_point(alpha = 0.7) +
-      geom_smooth(method = "lm", se = TRUE) +
-      facet_wrap(~ project, scales = "free") +
-      theme_bw() +
-      labs(
-            x = "Species Synchrony",
-            y = "Species Turnover",
-            title = "Within-site covariance: Synchrony vs. Turnover"
+# Games-Howell post-hoc — appropriate for unequal variances and sample sizes
+posthoc <- games_howell_test(dat, comm_n_stability ~ program)
+pw <- posthoc |>
+      transmute(group1, group2, p.adj)
+pvec <- pw |>
+      mutate(comparison = paste(group1, group2, sep = "-")) |>
+      select(comparison, p.adj) |>
+      deframe()
+cld <- multcompLetters(pvec, threshold = 0.05)
+
+letters_df <- tibble(
+      program = names(cld$Letters),
+      letters = cld$Letters) |>
+      mutate(program = factor(program, levels = c("MCR","PCCS","FCE","PCCC","SBC","VCR"))) |>
+      arrange(program) |> 
+      # remap CLD letters to alphabetical order for readability
+      # WARNING: if data changes, verify cld$Letters output before updating chartr mapping
+      mutate(
+            letters = chartr(
+                  old = "cabd",
+                  new = "abcd",
+                  letters
+            )
+      )
+letters_df
+
+letters <- letters_df |> 
+      left_join(dat) |> 
+      select(program, letters, comm_n_stability) |> 
+      group_by(program, letters) |> 
+      summarize(max = max(comm_n_stability, na.rm = TRUE),
+                .groups = 'drop') |> 
+      group_by(letters) |> 
+      mutate(pos = max(max))
+
+dat |> 
+      mutate(program = factor(
+            program,
+            levels = c("MCR", "PCCS", "FCE", "PCCC", "SBC", "VCR")
+      )) |>
+      ggplot(aes(x=program, y=comm_n_stability, fill = program)) +
+      geom_jitter(aes(color = program), shape = 16, size = 2, width = 0.2, alpha = 1.0)+
+      geom_boxplot(outlier.shape = NA, alpha = 0.35) +
+      scale_fill_manual(values = program_palette) + 
+      scale_color_manual(values = program_palette) +
+      labs(y = "CND Stability", 
+           fill = "Program",
+           x = NULL) +
+      theme_classic() +
+      geom_text(
+            data = letters, 
+            aes(x = program, y = pos + 0.2, label = letters), 
+            inherit.aes = FALSE, 
+            vjust = 0,
+            fontface = "bold",
+            size = 3.5,            
+            color = "black"      
       ) +
-      theme(legend.position = "none")
+      theme(axis.text.x = element_text(face = "bold", color = "black"),
+            axis.text.y = element_text(face = "bold", color = "black"),
+            axis.title.x = element_text(face = "bold", color = "black"),
+            axis.title.y = element_text(face = "bold", color = "black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"),
+            strip.text = element_text(face = "bold", color = "black"))
 
-##################################################################################################
-### Stability ~ Magnitude ------------------------------------------------------------------------
-##################################################################################################
+ggsave("output/figure-one.png", units = "in", width = 4,
+       height = 4, dpi =  600)
 
+
+## Figure Three Part B Simple Regression [CND Stability ~ Richness] ------------
 summ <- dat |>
       group_by(program) |> 
       mutate(stability = mean(comm_n_stability),
-             magnitude  = mean(comm_n_mean))
+             richness  = mean(s_rich_mean))
 
-summ_model <- lm(log1p(stability) ~ log1p(magnitude), data = summ)
+summ_model <- lm(log1p(stability) ~ log1p(richness), data = summ)
 summary(summ_model)$r.squared 
 summary(summ_model)
 r2_summ <- summary(summ_model)$r.squared
 r2_summ
 
 dat |>
-      ggplot(aes(x = log1p(comm_n_mean), y = log1p(comm_n_stability))) +
+      ggplot(aes(x = log1p(s_rich_mean), y = log1p(comm_n_stability))) +
       geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
       geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
-      geom_point(aes(x = log1p(magnitude), y = log1p(stability), color = program), size = 5, dat = summ) +
-      labs(x = "log(CND Supply + 1)",
+      geom_point(aes(x = log1p(richness), y = log1p(stability), color = program), size = 5, dat = summ) +
+      labs(x = "log(Species Richness + 1)",
            y = "log(CND Stability + 1)",
            color = 'Program') +
       scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
@@ -1873,62 +1720,213 @@ dat |>
             axis.text.y = element_text(face = "bold", color = "black", size = 14),
             axis.title.x = element_text(face = "bold", color = "black", size = 16),
             axis.title.y = element_text(face = "bold", color = "black", size = 16),
-            legend.position = c(0.20, 0.65),
+            legend.position = c(0.95, 0.05),
             legend.justification = c(1, 0),
             legend.text = element_text(face = "bold", color = "black"),
             legend.title = element_text(face = "bold", color = "black"))
 
-##################################################################################################
-### Magnitude ~ Richness -------------------------------------------------------------------------
-##################################################################################################
+ggsave("output/fig2-panelb.png", units = "in", width = 4.2,
+       height = 4.2, dpi =  600)
 
-summ <- dat |>
-      group_by(program) |> 
-      mutate(richness = mean(s_rich_mean),
-             magnitude  = mean(comm_n_mean))
 
-summ_model <- lm(log1p(magnitude) ~ log1p(richness), data = summ)
-summary(summ_model)$r.squared 
-summary(summ_model)
-r2_summ <- summary(summ_model)$r.squared
-r2_summ
+# Supporting Materials ----------------------------------------------------
+## Supplemental Figure One Model Validation Regression -------------------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette")
+rm(list = setdiff(ls(), keep))
 
-dat |>
-      ggplot(aes(x = log1p(s_rich_mean), y = log1p(comm_n_mean))) +
-      geom_smooth(aes(color = program), method = "lm", se = FALSE) + 
-      geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
-      # geom_point(aes(x = log1p(richness), y = log1p(magnitude), color = program), size = 5, dat = summ) +
-      labs(x = "log(Species Richness + 1)",
-           y = "log(CND Supply + 1)",
-           color = 'Program') +
-      # scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
+emp <- read_csv('local_data/empirical_excretion_kelp.csv') |> 
+      dplyr::rename(order = TAXON_ORDER,
+                    family = TAXON_FAMILY,
+                    genus = TAXON_GENUS,
+                    species = TAXON_SPECIES,
+                    wetmass_g = WM_g,
+                    diet_cat = `Functional group`,
+                    nind_umol_hr = `exc_rate_NH4_umol_hour-1`,
+                    region = Region) |> 
+      mutate(scientific_name = paste(genus, species, sep = " "),
+             nind_ug_hr = 18.042*nind_umol_hr) |> 
+      dplyr::select(scientific_name, wetmass_g, nind_ug_hr, nind_umol_hr, order, family, genus, species, diet_cat, region)
+glimpse(emp)
+
+kelp_diet <- read_csv('local_data/kelp_empirical_species_list_updated.csv')
+glimpse(kelp_diet)      
+kelp <- emp |> dplyr::select(-diet_cat)
+glimpse(kelp)
+kelp_all <- kelp |> left_join(kelp_diet) |> distinct()
+
+### clean up environment 
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "kelp_all")
+rm(list = setdiff(ls(), keep))
+
+kelp1 <- kelp_all |> 
+      rename(nind_ug_hr_emp = nind_ug_hr,
+             nind_umol_hr_emp = nind_umol_hr) |> 
+      mutate(drymass_g = wetmass_g*dm_conv,
+             phylum = "Chordata") |> 
+      mutate(temp = case_when(
+            region == "Central California" ~ 13,
+            region == "Southern California" ~ 17
+      ))
+glimpse(kelp1)
+
+kelp2 <- kelp1 |> 
+      ### vertebrate coefficient classification
+      mutate(vert_coef = if_else(phylum == "Chordata", 0.7804, 0),
+             vert_coef_upper = if_else(phylum == "Chordata", 0.7804 + 0.0655, 0),
+             vert_coef_lower = if_else(phylum == "Chordata", 0.7804 - 0.0655, 0)) |> 
+      ### diet coefficient classification
+      mutate(diet_coef = case_when(
+            diet_cat == "algae_detritus" ~ -0.0389,
+            diet_cat == "invert" ~ -0.2013,
+            diet_cat == "fish" ~ -0.0537,
+            diet_cat == "fish_invert" ~ -0.1732,
+            diet_cat == "algae_invert" ~ 0,
+            TRUE ~ NA)) |> 
+      mutate(diet_coef_upper = case_when(
+            diet_cat == "algae_detritus" ~ -0.0389 + 0.0765,
+            diet_cat == "invert" ~ -0.2013 + 0.0771,
+            diet_cat == "fish" ~ -0.0537 + 0.2786,
+            diet_cat == "fish_invert" ~ -0.1732 + 0.1384,
+            diet_cat == "algae_invert" ~ 0,
+            TRUE ~ NA)) |> 
+      mutate(diet_coef_lower = case_when(
+            diet_cat == "algae_detritus" ~ -0.0389 - 0.0765,
+            diet_cat == "invert" ~ -0.2013 - 0.0771,
+            diet_cat == "fish" ~ -0.0537 - 0.2786,
+            diet_cat == "fish_invert" ~ -0.1732 - 0.1384,
+            diet_cat == "algae_invert" ~ 0,
+            TRUE ~ NA)) |> 
+      ### temperature coefficient classification
+      mutate(temp_coef = 0.0246,
+             temp_coef_upper = 0.0246 + 0.0014,
+             temp_coef_lower = 0.0246 - 0.0014) |> 
+      ### dry mass coefficient classification
+      mutate(dm_coef = 0.6840,
+             dm_coef_upper = 0.6840 + 0.0177,
+             dm_coef_lower = 0.6840 - 0.0177) |> 
+      ### intercept coefficient classification
+      mutate(int_coef = 1.4610,
+             int_coef_upper = 1.4610 + 0.0897,
+             int_coef_lower = 1.4610 - 0.0897)
+glimpse(kelp2)
+
+kelp3 <- kelp2 |> 
+      mutate(n10 = int_coef + dm_coef*(log10(drymass_g)) + temp_coef*temp + diet_coef + vert_coef,
+             n10_lower = int_coef_lower + dm_coef_lower*(log10(drymass_g)) + temp_coef_lower*temp + diet_coef_lower + vert_coef_lower,
+             n10_upper = int_coef_upper + dm_coef_upper*(log10(drymass_g)) + temp_coef_upper*temp + diet_coef_upper + vert_coef_upper) |> 
+      mutate(nind_ug_hr = 10^n10,
+             nind_ug_hr_lower = 10^n10_lower,
+             nind_ug_hr_upper = 10^n10_upper)
+
+kelp4 <- kelp3 |> 
+      dplyr::select(scientific_name, wetmass_g, drymass_g, diet_cat,
+                    nind_ug_hr_emp, nind_ug_hr, nind_ug_hr_lower, nind_ug_hr_upper,
+                    phylum, order, family, genus, species) |> 
+      mutate(
+            n10_emp = log10(nind_ug_hr_emp),
+            n10_mod = log10(nind_ug_hr),
+            n10_mod_low = log10(nind_ug_hr_lower),
+            n10_mod_upp = log10(nind_ug_hr_lower),
+            n10_dm = log10(drymass_g)
+      ) |> 
+      group_by(scientific_name) |> mutate(n = n()) |> ungroup() |> 
+      filter(n > 2) |> 
+      dplyr::select(-n) |> 
+      rename(diet = diet_cat) |> 
+      group_by(scientific_name) |> mutate(species_n = n()) |> ungroup() |> 
+      group_by(genus) |> mutate(genus_n = n()) |> ungroup() |> 
+      group_by(family) |> mutate(family_n = n()) |> ungroup()
+
+mod <- glmmTMB(
+      n10_emp ~ n10_mod, family = gaussian(), data = kelp4
+)
+summary(mod)
+performance::performance(mod)
+
+kelp4 |> 
+      ggplot(aes(x = n10_mod, y = n10_emp)) +
+      geom_point(size = 2, alpha = 0.2, color = '#2A788EFF') +
+      geom_smooth(method = lm, color = "black", fill = "black") +
       theme_classic() +
-      scale_color_manual(values = program_palette) +
+      scale_y_continuous(breaks = c(1,2,3,4,5), limits = c(1.13,5.233)) +
+      scale_x_continuous(breaks = c(1,2,3,4,5), limits = c(1.13,5.233)) +
+      ylab(expression(bold("Empirical Log" [10] * " N Excretion (" * mu * "g" %.% ind^-1 %.% hr^-1 * ")"))) +
+      xlab(expression(bold("Modeled Log" [10] * " N Excretion (" * mu * "g" %.% ind^-1 %.% hr^-1 * ")"))) +
       theme(axis.text.x = element_text(face = "bold", color = "black", size = 14),
             axis.text.y = element_text(face = "bold", color = "black", size = 14),
-            axis.title.x = element_text(face = "bold", color = "black", size = 16),
-            axis.title.y = element_text(face = "bold", color = "black", size = 16),
-            legend.position = c(0.20, 0.65),
-            legend.justification = c(1, 0),
+            axis.title.x = element_text(face = "bold", color = "black", size = 14),
+            axis.title.y = element_text(face = "bold", color = "black", size = 14),
+            legend.position = "none",
             legend.text = element_text(face = "bold", color = "black"),
             legend.title = element_text(face = "bold", color = "black"))
 
-dat |>
-      ggplot(aes(x = log1p(s_rich_mean), 
-                 y = log1p(comm_n_mean),
-                 color = program)) +
-      geom_smooth(method = "lm", se = FALSE) +
-      geom_point(alpha = 0.30) +
-      facet_wrap(~program, scales = "free") +
+ggsave("output/smf1-model-validation.png", units = "in", width = 8,
+       height = 4, dpi = 600)
+
+## Supplemental Figure Two POR Effect on CND Stability Regression --------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette")
+rm(list = setdiff(ls(), keep))
+
+summary <- cnd_ts_data |> 
+      group_by(project, site) |> 
+      summarize(years = n_distinct(year)) |> 
+      rename(program = project,
+             site = site)
+
+dat_summary <- model_data_all |> 
+      dplyr::select(site, comm_n_stability)
+
+all <- left_join(dat_summary, summary, by = "site")  
+model <- lm(comm_n_stability ~ years, data = all)
+summary(model)$r.squared 
+r2 <- summary(model)$r.squared
+summary(model)
+
+a <- all |>
+      # filter(Program != "VCR") |> 
+      ggplot(aes(x = years, y = comm_n_stability)) +
+      geom_point(aes(color = program), size = 2) +  # Adds the scatter plot points
+      geom_smooth(method = "lm", size = 2, color = "black", linetype = "solid", se = FALSE) +
+      labs(x = "Period of Record (years)",
+           y = "CND Stability",
+           color = 'Program') +
+      theme_classic() +
       scale_color_manual(values = program_palette) +
-      theme_classic()
+      theme(axis.text.x = element_text(face = "bold", color = "black"),
+            axis.text.y = element_text(face = "bold", color = "black"),
+            axis.title.x = element_text(face = "bold", color = "black"),
+            axis.title.y = element_text(face = "bold", color = "black"),
+            legend.position = c(0.15,0.75),
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"))
+a
 
-lmm_slopes <- lmer(
-      log1p(comm_n_mean) ~ log1p(s_rich_mean) + 
-            (log1p(s_rich_mean) | program), 
-      data = dat
-)
-summary(lmm_slopes)
+all_short <- all |> filter(program != "VCR")
+model_short <- lm(comm_n_stability ~ years, data = all_short)
+summary(model_short)$r.squared 
+r2_short <- summary(model_short)$r.squared
+summary(model_short)
 
-# extract R2 - marginal (fixed effects only) and conditional (full model)
-r.squaredGLMM(lmm_slopes)
+b <- all |>
+      filter(program != "VCR") |>
+      ggplot(aes(x = years, y = comm_n_stability)) +
+      geom_point(aes(color = program), size = 2) +
+      geom_smooth(method = "lm", size = 2, color = "black", linetype = "dashed", se = FALSE) +
+      labs(x = "Period of Record (years)",
+           y = "CND Stability") +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      theme(axis.text.x = element_text(face = "bold", color = "black"),
+            axis.text.y = element_text(face = "bold", color = "black"),
+            axis.title.x = element_text(face = "bold", color = "black"),
+            axis.title.y = element_text(face = "bold", color = "black"),
+            legend.position = "none",
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"))
+b
+ggarrange(a, b,
+          labels = c('a)','b)'),
+          ncol = 2, vjust = 1.3, align = "h")
+
+ggsave("output/smf2-por-effect.png", units = "in", width = 8,
+       height = 4, dpi = 600)
