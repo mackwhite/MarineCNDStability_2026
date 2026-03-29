@@ -34,8 +34,8 @@ model_data_all |>
 ### Stability ~ Magnitude ------------------------------------------------------------------------
 ##################################################################################################
 
-summ <- dat |>
-      group_by(program) |> 
+summ <- model_data_all |>
+      group_by(project) |> 
       mutate(stability = mean(comm_n_stability),
              magnitude  = mean(comm_n_mean))
 
@@ -45,11 +45,11 @@ summary(summ_model)
 r2_summ <- summary(summ_model)$r.squared
 r2_summ
 
-dat |>
+model_data_all |>
       ggplot(aes(x = log1p(comm_n_mean), y = log1p(comm_n_stability))) +
       geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
-      geom_point(aes(color = program), size = 1.5, alpha = 0.30) +
-      geom_point(aes(x = log1p(magnitude), y = log1p(stability), color = program), size = 5, dat = summ) +
+      geom_point(aes(color = project), size = 1.5, alpha = 0.30) +
+      geom_point(aes(x = log1p(magnitude), y = log1p(stability), color = project), size = 5, dat = summ) +
       labs(x = "log(CND Supply + 1)",
            y = "log(CND Stability + 1)",
            color = 'Program') +
