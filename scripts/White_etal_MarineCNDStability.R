@@ -1691,12 +1691,11 @@ dat |>
 # ggsave("output/figure-one.png", units = "in", width = 4,
 #        height = 4, dpi =  600)
 
-
 ## Figure Three Part B Simple Regression [CND Stability ~ Richness] ------------
 summ <- dat |>
       group_by(program) |> 
-      mutate(stability = mean(comm_n_stability),
-             richness  = mean(s_rich_mean))
+      summarize(stability = mean(comm_n_stability),
+                richness  = mean(s_rich_mean))
 
 summ_model <- lm(log1p(stability) ~ log1p(richness), data = summ)
 summary(summ_model)$r.squared 
@@ -1719,18 +1718,57 @@ dat |>
             axis.text.y = element_text(face = "bold", color = "black", size = 14),
             axis.title.x = element_text(face = "bold", color = "black", size = 16),
             axis.title.y = element_text(face = "bold", color = "black", size = 16),
-            legend.position = c(0.95, 0.05),
+            legend.position = c(0.99, 0.00),
             legend.justification = c(1, 0),
             legend.text = element_text(face = "bold", color = "black"),
-            legend.title = element_text(face = "bold", color = "black"))
+            legend.title = element_text(face = "bold", color = "black"),
+            legend.background = element_blank())
 
-# ggsave("output/fig2-panelb.png", units = "in", width = 4.2,
-#        height = 4.2, dpi =  600)
+ggsave("output/fig3-panelb.png", units = "in", width = 5,
+       height = 5, dpi =  600)
 
+# Supporting Materials ---------------------------------------------------------
+## Supplemental Figure One CND Magnitude Effect on CND Stability Regression --------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "dat")
+rm(list = setdiff(ls(), keep))
+summ <- model_data_all |>
+      group_by(project) |> 
+      summarize(stability = mean(comm_n_stability),
+                magnitude = mean(comm_n_mean))
 
-# Supporting Materials ----------------------------------------------------
-## Supplemental Figure One Model Validation Regression -------------------------
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette")
+glimpse(summ)
+summ_model <- lm(log1p(stability) ~ log1p(magnitude), data = summ)
+summary(summ_model)$r.squared 
+summary(summ_model)
+r2_summ <- summary(summ_model)$r.squared
+r2_summ
+
+model_data_all |>
+      ggplot(aes(x = log1p(comm_n_mean), y = log1p(comm_n_stability))) +
+      geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
+      geom_point(aes(color = project), size = 1.5, alpha = 0.30) +
+      geom_point(aes(x = log1p(magnitude), y = log1p(stability), color = project), size = 5, dat = summ) +
+      labs(x = "log(CND Magnitude + 1)",
+           y = "log(CND Stability + 1)",
+           color = 'Program') +
+      scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
+      theme_classic() +
+      scale_color_manual(values = program_palette) +
+      theme(axis.text.x = element_text(face = "bold", color = "black", size = 14),
+            axis.text.y = element_text(face = "bold", color = "black", size = 14),
+            axis.title.x = element_text(face = "bold", color = "black", size = 16),
+            axis.title.y = element_text(face = "bold", color = "black", size = 16),
+            legend.position = c(0.20, 0.59),
+            legend.justification = c(1, 0),
+            legend.text = element_text(face = "bold", color = "black"),
+            legend.title = element_text(face = "bold", color = "black"),
+            legend.background = element_blank())
+
+ggsave("output/smf1-stability-magnitude-regression.png", units = "in", width = 5,
+       height = 5, dpi =  600)
+
+## Supplemental Figure Two Model Validation Regression -------------------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "dat")
 rm(list = setdiff(ls(), keep))
 
 emp <- read_csv('local_data/empirical_excretion_kelp.csv') |> 
@@ -1754,7 +1792,7 @@ glimpse(kelp)
 kelp_all <- kelp |> left_join(kelp_diet) |> distinct()
 
 ### clean up environment 
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "kelp_all")
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "dat","kelp_all")
 rm(list = setdiff(ls(), keep))
 
 kelp1 <- kelp_all |> 
@@ -1859,11 +1897,11 @@ kelp4 |>
             legend.text = element_text(face = "bold", color = "black"),
             legend.title = element_text(face = "bold", color = "black"))
 
-# ggsave("output/smf1-model-validation.png", units = "in", width = 8,
+# ggsave("output/smf2-model-validation.png", units = "in", width = 8,
 #        height = 4, dpi = 600)
 
-## Supplemental Figure Two POR Effect on CND Stability Regression --------------
-keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette")
+## Supplemental Figure Three POR Effect on CND Stability Regression --------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "dat")
 rm(list = setdiff(ls(), keep))
 
 summary <- cnd_ts_data |> 
@@ -1927,37 +1965,59 @@ ggarrange(a, b,
           labels = c('a)','b)'),
           ncol = 2, vjust = 1.3, align = "h")
 
-# ggsave("output/smf2-por-effect.png", units = "in", width = 8,
+# ggsave("output/smf3-por-effect.png", units = "in", width = 8,
 #        height = 4, dpi = 600)
 
-## Supplemental Figure XXX CND Magnitude Effect on CND Stability Regression --------------
-summ <- model_data_all |>
-      group_by(project) |> 
-      mutate(stability = mean(comm_n_stability),
-             magnitude  = mean(comm_n_mean))
+# summary statistics ------------------------------------------------------
+keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "dat")
+rm(list = setdiff(ls(), keep))
 
-summ_model <- lm(log1p(stability) ~ log1p(magnitude), data = summ)
-summary(summ_model)$r.squared 
-summary(summ_model)
-r2_summ <- summary(summ_model)$r.squared
-r2_summ
+summary <- dat |> 
+      group_by(program) |> 
+      summarize(
+            stability_m = round(mean(comm_n_stability), 2),
+            stability_sd = round(sd(comm_n_stability), 1),
+            magnitude_m = round(mean(comm_n_mean), 2),
+            magnitude_sd = round(sd(comm_n_mean), 1),
+            .groups = 'drop'
+      ) |>
+      mutate(
+            stability = paste0(stability_m, " ± ", stability_sd),
+            magnitude = paste0(magnitude_m, " ± ", magnitude_sd)
+      ) |>
+      select(program, magnitude, stability) |> 
+      arrange(desc(magnitude))
+print(summary)
 
-model_data_all |>
-      ggplot(aes(x = log1p(comm_n_mean), y = log1p(comm_n_stability))) +
-      geom_smooth(method = "lm", size = 1.5, color = "black", linetype = "solid", se = FALSE) +
-      geom_point(aes(color = project), size = 1.5, alpha = 0.30) +
-      geom_point(aes(x = log1p(magnitude), y = log1p(stability), color = project), size = 5, dat = summ) +
-      labs(x = "log(CND Supply + 1)",
-           y = "log(CND Stability + 1)",
-           color = 'Program') +
-      scale_y_continuous(breaks = seq(0.25, 1.75, by = 0.5)) +
-      theme_classic() +
-      scale_color_manual(values = program_palette) +
-      theme(axis.text.x = element_text(face = "bold", color = "black", size = 14),
-            axis.text.y = element_text(face = "bold", color = "black", size = 14),
-            axis.title.x = element_text(face = "bold", color = "black", size = 16),
-            axis.title.y = element_text(face = "bold", color = "black", size = 16),
-            legend.position = c(0.20, 0.65),
-            legend.justification = c(1, 0),
-            legend.text = element_text(face = "bold", color = "black"),
-            legend.title = element_text(face = "bold", color = "black"))
+summary_mg <- dat |> 
+      mutate(comm_n_mean = comm_n_mean * 0.001) |> 
+      select(program, comm_n_stability, comm_n_mean,
+             s_rich_mean, s_div_mean, t_rich_mean, t_div_mean) |> 
+      group_by(program) |> 
+      summarize(
+            magnitude_m    = round(mean(comm_n_mean, na.rm = TRUE), 1),
+            magnitude_sd   = round(sd(comm_n_mean, na.rm = TRUE), 1),
+            stability_m    = round(mean(comm_n_stability, na.rm = TRUE), 1),
+            stability_sd   = round(sd(comm_n_stability, na.rm = TRUE), 1),
+            s_rich_m       = round(mean(s_rich_mean, na.rm = TRUE), 1),
+            s_rich_sd      = round(sd(s_rich_mean, na.rm = TRUE), 1),
+            s_div_m        = round(mean(s_div_mean, na.rm = TRUE), 1),
+            s_div_sd       = round(sd(s_div_mean, na.rm = TRUE), 1),
+            t_rich_m       = round(mean(t_rich_mean, na.rm = TRUE), 1),
+            t_rich_sd      = round(sd(t_rich_mean, na.rm = TRUE), 1),
+            t_div_m        = round(mean(t_div_mean, na.rm = TRUE), 1),
+            t_div_sd       = round(sd(t_div_mean, na.rm = TRUE), 1),
+            .groups = 'drop'
+      ) |>
+      mutate(
+            magnitude  = paste0(magnitude_m, " ± ", magnitude_sd),
+            stability  = paste0(stability_m, " ± ", stability_sd),
+            s_rich     = paste0(s_rich_m, " ± ", s_rich_sd),
+            s_div      = paste0(s_div_m, " ± ", s_div_sd),
+            t_rich     = paste0(t_rich_m, " ± ", t_rich_sd),
+            t_div      = paste0(t_div_m, " ± ", t_div_sd)
+      ) |>
+      select(program, stability, magnitude, s_rich, s_div, t_rich, t_div) |> 
+      arrange(program)
+
+print(summary_mg)
