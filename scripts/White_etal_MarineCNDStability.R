@@ -1897,8 +1897,8 @@ kelp4 |>
             legend.text = element_text(face = "bold", color = "black"),
             legend.title = element_text(face = "bold", color = "black"))
 
-# ggsave("output/smf2-model-validation.png", units = "in", width = 8,
-#        height = 4, dpi = 600)
+# ggsave("output/smf2-model-validation.png", units = "in", width = 6,
+#        height = 6, dpi = 600)
 
 ## Supplemental Figure Three POR Effect on CND Stability Regression --------------
 keep <- c("nacheck", "model_data_all", "cnd_ts_data", "program_palette", "dat")
